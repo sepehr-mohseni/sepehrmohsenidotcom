@@ -1,0 +1,3 @@
+# Database backups directory
+# Backups are created with: ./deploy.sh backup
+# Last 10 backups are kept automatically

@@ -1,0 +1,87 @@
+{
+  "common": {
+    "home": "Home",
+    "about": "About",
+    "projects": "Projects",
+    "blog": "Blog",
+    "contact": "Contact",
+    "experience": "Experience",
+    "skills": "Skills",
+    "readMore": "Read more",
+    "viewAll": "View all",
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "notFound": "Not found",
+    "backToHome": "Back to home",
+    "switchLanguage": "فارسی",
+    "darkMode": "Dark mode",
+    "lightMode": "Light mode"
+  },
+  "hero": {
+    "greeting": "Hello, I'm",
+    "name": "Sepehr Mohseni",
+    "title": "Tech Lead | Senior Software Engineer",
+    "subtitle": "Full-Stack Developer specialized in Laravel, React, and modern web architecture. I help teams modernize legacy systems, build scalable backends, and deliver fast, reliable PWAs. Experienced in API design, database optimization, and performance tuning.",
+    "cta": "Get in touch",
+    "viewWork": "View my work"
+  },
+  "about": {
+    "title": "About Me",
+    "description": "Tech Lead & Senior Software Engineer with expertise in building scalable applications",
+    "paragraph1": "With over 6 years of experience in software development, I specialize in Laravel, React, and modern web architecture. I help teams modernize legacy systems, build scalable backends, and deliver fast, reliable PWAs. My expertise spans API design, database optimization, and performance tuning, with a strong focus on clean code and maintainability.",
+    "paragraph2": "I've delivered projects across logistics, healthcare, travel, and e-commerce, often taking ownership from architecture to deployment. Passionate about helping agencies and product teams ship better software, faster. Currently leading technical teams and driving architectural decisions."
+  },
+  "skills": {
+    "title": "Skills & Technologies",
+    "frontend": "Frontend",
+    "backend": "Backend",
+    "databases": "Databases",
+    "devops": "DevOps & Tools",
+    "ai": "AI & ML",
+    "other": "Other"
+  },
+  "projects": {
+    "title": "Featured Projects",
+    "subtitle": "A showcase of my recent work and side projects that demonstrate my skills and passion for building great software.",
+    "viewProject": "Live Demo",
+    "viewCode": "Code",
+    "allProjects": "All Projects"
+  },
+  "experience": {
+    "title": "Work Experience",
+    "present": "Present"
+  },
+  "blog": {
+    "title": "Blog",
+    "subtitle": "Thoughts, tutorials, and insights about web development, software architecture, and the tech industry.",
+    "readingTime": "min read",
+    "publishedOn": "Published on",
+    "tags": "Tags",
+    "noPosts": "No posts yet. Check back soon!",
+    "fallbackNotice": "This article is being translated. Showing the original version.",
+    "translateCta": "Help translate this post"
+  },
+  "contact": {
+    "title": "Get in Touch",
+    "subtitle": "Have a project in mind or want to collaborate? I'd love to hear from you. Let's create something amazing together.",
+    "name": "Name",
+    "email": "Email",
+    "message": "Message",
+    "send": "Send Message",
+    "sending": "Sending...",
+    "success": "Message sent successfully! I'll get back to you soon.",
+    "error": "Failed to send message. Please try again or email me directly.",
+    "namePlaceholder": "John Doe",
+    "emailPlaceholder": "john@example.com",
+    "messagePlaceholder": "Tell me about your project..."
+  },
+  "footer": {
+    "copyright": "All rights reserved.",
+    "madeWith": "Built with",
+    "and": "and"
+  },
+  "404": {
+    "title": "Page Not Found",
+    "description": "The page you're looking for doesn't exist or has been moved."
+  }
+}

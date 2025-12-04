@@ -1,0 +1,429 @@
+---
+title: "Advanced TypeScript Patterns: Type-Safe Code That Scales"
+description: "Master advanced TypeScript patterns including generics, conditional types, mapped types, and type guards to write bulletproof, maintainable code."
+date: "2025-09-01"
+tags: ["TypeScript", "JavaScript", "Frontend", "Backend", "Programming"]
+hero: "https://images.unsplash.com/photo-1516116216624-53e697fedbea?w=1200&h=630&fit=crop"
+draft: false
+---
+
+TypeScript's type system is incredibly powerful. This guide explores advanced patterns that will help you write safer, more maintainable code while leveraging TypeScript's full potential.
+
+## Generic Constraints and Inference
+
+### Basic Generics with Constraints
+
+```typescript
+// Constrain generic to objects with an id property
+interface HasId {
+  id: string | number;
+}
+
+function findById<T extends HasId>(items: T[], id: T['id']): T | undefined {
+  return items.find(item => item.id === id);
+}
+
+// Usage
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+const users: User[] = [
+  { id: 1, name: 'John', email: 'john@example.com' },
+  { id: 2, name: 'Jane', email: 'jane@example.com' },
+];
+
+const user = findById(users, 1); // Type: User | undefined
+```
+
+### Generic Factory Functions
+
+```typescript
+// Factory function with proper type inference
+function createStore<T>(initialState: T) {
+  let state = initialState;
+  const listeners = new Set<(state: T) => void>();
+
+  return {
+    getState: () => state,
+    setState: (newState: Partial<T>) => {
+      state = { ...state, ...newState };
+      listeners.forEach(listener => listener(state));
+    },
+    subscribe: (listener: (state: T) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+// Type is inferred from initial state
+const userStore = createStore({
+  user: null as User | null,
+  isLoading: false,
+  error: null as string | null,
+});
+
+userStore.setState({ isLoading: true }); // Type-safe!
+```
+
+<Callout type="info">
+TypeScript can infer complex types from usage. Let the compiler do the work when possible, but add explicit types for public APIs.
+</Callout>
+
+## Conditional Types
+
+### Basic Conditional Types
+
+```typescript
+// Extract return type based on input
+type ApiResponse<T> = T extends 'user' 
+  ? User 
+  : T extends 'product' 
+    ? Product 
+    : never;
+
+// Usage
+type UserResponse = ApiResponse<'user'>; // User
+type ProductResponse = ApiResponse<'product'>; // Product
+
+// Practical example: Unwrap Promise types
+type Awaited<T> = T extends Promise<infer U> ? Awaited<U> : T;
+
+type Result = Awaited<Promise<Promise<string>>>; // string
+```
+
+### Distributive Conditional Types
+
+```typescript
+// Conditional types distribute over unions
+type NonNullable<T> = T extends null | undefined ? never : T;
+
+type Example = NonNullable<string | null | undefined>; // string
+
+// Extract specific types from union
+type ExtractStrings<T> = T extends string ? T : never;
+
+type Mixed = string | number | boolean | 'hello' | 'world';
+type OnlyStrings = ExtractStrings<Mixed>; // string | 'hello' | 'world'
+```
+
+### Infer Keyword for Type Extraction
+
+```typescript
+// Extract function parameter types
+type Parameters<T> = T extends (...args: infer P) => any ? P : never;
+
+// Extract return type
+type ReturnType<T> = T extends (...args: any[]) => infer R ? R : never;
+
+// Extract array element type
+type ArrayElement<T> = T extends (infer E)[] ? E : never;
+
+// Practical example: Extract props from React component
+type ComponentProps<T> = T extends React.ComponentType<infer P> ? P : never;
+
+// Usage
+function fetchUser(id: number): Promise<User> { /* ... */ }
+
+type FetchUserParams = Parameters<typeof fetchUser>; // [number]
+type FetchUserReturn = ReturnType<typeof fetchUser>; // Promise<User>
+```
+
+## Mapped Types
+
+### Transform Object Types
+
+```typescript
+// Make all properties optional
+type Partial<T> = {
+  [P in keyof T]?: T[P];
+};
+
+// Make all properties required
+type Required<T> = {
+  [P in keyof T]-?: T[P];
+};
+
+// Make all properties readonly
+type Readonly<T> = {
+  readonly [P in keyof T]: T[P];
+};
+
+// Pick specific properties
+type Pick<T, K extends keyof T> = {
+  [P in K]: T[P];
+};
+```
+
+### Advanced Mapped Types
+
+```typescript
+// Create getters for all properties
+type Getters<T> = {
+  [K in keyof T as `get${Capitalize<string & K>}`]: () => T[K];
+};
+
+interface Person {
+  name: string;
+  age: number;
+}
+
+type PersonGetters = Getters<Person>;
+// { getName: () => string; getAge: () => number; }
+
+// Filter properties by type
+type FilterByType<T, U> = {
+  [K in keyof T as T[K] extends U ? K : never]: T[K];
+};
+
+interface Mixed {
+  id: number;
+  name: string;
+  active: boolean;
+  count: number;
+}
+
+type NumberProps = FilterByType<Mixed, number>;
+// { id: number; count: number; }
+```
+
+<Note title="Type Tip">
+Use template literal types with mapped types to create powerful type transformations for API clients, form builders, and more.
+</Note>
+
+## Type Guards and Narrowing
+
+### Custom Type Guards
+
+```typescript
+// Type predicate function
+function isUser(value: unknown): value is User {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    'email' in value &&
+    typeof (value as User).id === 'number' &&
+    typeof (value as User).email === 'string'
+  );
+}
+
+// Usage
+function processData(data: unknown) {
+  if (isUser(data)) {
+    // TypeScript knows data is User here
+    console.log(data.email);
+  }
+}
+
+// Discriminated unions with type guards
+interface SuccessResponse {
+  status: 'success';
+  data: User;
+}
+
+interface ErrorResponse {
+  status: 'error';
+  message: string;
+}
+
+type ApiResponse = SuccessResponse | ErrorResponse;
+
+function handleResponse(response: ApiResponse) {
+  if (response.status === 'success') {
+    // TypeScript narrows to SuccessResponse
+    console.log(response.data.name);
+  } else {
+    // TypeScript narrows to ErrorResponse
+    console.log(response.message);
+  }
+}
+```
+
+### Assertion Functions
+
+```typescript
+// Assert function that throws if condition is false
+function assertIsUser(value: unknown): asserts value is User {
+  if (!isUser(value)) {
+    throw new Error('Value is not a User');
+  }
+}
+
+// Usage
+function processUserData(data: unknown) {
+  assertIsUser(data);
+  // After assertion, TypeScript knows data is User
+  console.log(data.email);
+}
+
+// Assert non-null
+function assertDefined<T>(
+  value: T | null | undefined,
+  message?: string
+): asserts value is T {
+  if (value === null || value === undefined) {
+    throw new Error(message ?? 'Value is not defined');
+  }
+}
+```
+
+## Template Literal Types
+
+### Building Type-Safe APIs
+
+```typescript
+// Event handler types
+type EventName = 'click' | 'focus' | 'blur';
+type EventHandler = `on${Capitalize<EventName>}`;
+// 'onClick' | 'onFocus' | 'onBlur'
+
+// Route parameters
+type Route = '/users/:id' | '/posts/:postId/comments/:commentId';
+
+type ExtractParams<T extends string> = 
+  T extends `${infer _Start}:${infer Param}/${infer Rest}`
+    ? Param | ExtractParams<`/${Rest}`>
+    : T extends `${infer _Start}:${infer Param}`
+      ? Param
+      : never;
+
+type UserRouteParams = ExtractParams<'/users/:id'>; // 'id'
+type CommentRouteParams = ExtractParams<'/posts/:postId/comments/:commentId'>;
+// 'postId' | 'commentId'
+```
+
+### Type-Safe CSS Properties
+
+```typescript
+type CSSUnit = 'px' | 'em' | 'rem' | '%' | 'vh' | 'vw';
+type CSSValue = `${number}${CSSUnit}`;
+
+interface Spacing {
+  margin: CSSValue;
+  padding: CSSValue;
+}
+
+const spacing: Spacing = {
+  margin: '16px',    // Valid
+  padding: '1.5rem', // Valid
+  // margin: '16',   // Error: not a valid CSSValue
+};
+```
+
+## Utility Types in Practice
+
+### Building a Form Library
+
+```typescript
+// Form field configuration
+type FieldConfig<T> = {
+  [K in keyof T]: {
+    type: T[K] extends string 
+      ? 'text' | 'email' | 'password'
+      : T[K] extends number 
+        ? 'number'
+        : T[K] extends boolean 
+          ? 'checkbox'
+          : 'text';
+    label: string;
+    required?: boolean;
+    validate?: (value: T[K]) => string | undefined;
+  };
+};
+
+interface UserForm {
+  name: string;
+  email: string;
+  age: number;
+  newsletter: boolean;
+}
+
+const userFormConfig: FieldConfig<UserForm> = {
+  name: {
+    type: 'text',
+    label: 'Full Name',
+    required: true,
+    validate: (value) => value.length < 2 ? 'Name too short' : undefined,
+  },
+  email: {
+    type: 'email',
+    label: 'Email Address',
+    required: true,
+  },
+  age: {
+    type: 'number',
+    label: 'Age',
+  },
+  newsletter: {
+    type: 'checkbox',
+    label: 'Subscribe to newsletter',
+  },
+};
+```
+
+### Type-Safe API Client
+
+```typescript
+// Define API endpoints
+interface ApiEndpoints {
+  '/users': {
+    GET: { response: User[] };
+    POST: { body: CreateUserDTO; response: User };
+  };
+  '/users/:id': {
+    GET: { response: User };
+    PUT: { body: UpdateUserDTO; response: User };
+    DELETE: { response: void };
+  };
+}
+
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+
+// Extract response type for endpoint and method
+type ApiResponse<
+  E extends keyof ApiEndpoints,
+  M extends keyof ApiEndpoints[E]
+> = ApiEndpoints[E][M] extends { response: infer R } ? R : never;
+
+// Type-safe fetch wrapper
+async function apiClient<
+  E extends keyof ApiEndpoints,
+  M extends keyof ApiEndpoints[E] & HttpMethod
+>(
+  endpoint: E,
+  method: M,
+  options?: ApiEndpoints[E][M] extends { body: infer B } ? { body: B } : never
+): Promise<ApiResponse<E, M>> {
+  const response = await fetch(endpoint as string, {
+    method,
+    body: options?.body ? JSON.stringify(options.body) : undefined,
+  });
+  return response.json();
+}
+
+// Usage - fully type-safe!
+const users = await apiClient('/users', 'GET');
+// Type: User[]
+
+const newUser = await apiClient('/users', 'POST', {
+  body: { name: 'John', email: 'john@example.com' },
+});
+// Type: User
+```
+
+## Conclusion
+
+Advanced TypeScript patterns enable you to build type-safe applications that catch errors at compile time rather than runtime. By mastering generics, conditional types, mapped types, and type guards, you can create APIs that are both flexible and bulletproof.
+
+Key takeaways:
+- Use generics with constraints for reusable, type-safe functions
+- Leverage conditional types for complex type transformations
+- Create mapped types for systematic type modifications
+- Implement type guards for runtime type checking
+- Combine patterns for powerful, type-safe APIs
+
+<CTA href="https://www.typescriptlang.org/docs/handbook/2/types-from-types.html">TypeScript Type Manipulation Guide</CTA>

@@ -1,0 +1,382 @@
+---
+title: "MySQL Performance Tuning: From Slow Queries to Lightning-Fast Database"
+description: "Master MySQL performance optimization with indexing strategies, query optimization, configuration tuning, and monitoring techniques for high-traffic applications."
+date: "2025-10-20"
+tags: ["MySQL", "Database", "Performance", "Backend", "SQL"]
+hero: "https://images.unsplash.com/photo-1544383835-bda2bc66a55d?w=1200&h=630&fit=crop"
+draft: false
+---
+
+Database performance is often the bottleneck in web applications. This guide covers comprehensive MySQL optimization techniques from query-level improvements to server configuration tuning.
+
+## Understanding Query Execution
+
+Before optimizing, understand how MySQL executes queries using `EXPLAIN`:
+
+```sql
+EXPLAIN SELECT 
+    o.id,
+    o.total,
+    u.name,
+    COUNT(oi.id) as item_count
+FROM orders o
+JOIN users u ON o.user_id = u.id
+JOIN order_items oi ON o.id = oi.order_id
+WHERE o.status = 'completed'
+    AND o.created_at > '2024-01-01'
+GROUP BY o.id
+ORDER BY o.created_at DESC
+LIMIT 20;
+```
+
+<Callout type="info">
+Key EXPLAIN columns to watch: `type` (aim for `ref` or better), `rows` (lower is better), `Extra` (avoid "Using filesort" and "Using temporary").
+</Callout>
+
+### EXPLAIN Output Analysis
+
+```
++----+-------------+-------+--------+---------------+---------+---------+------------------+------+-------------+
+| id | select_type | table | type   | possible_keys | key     | key_len | ref              | rows | Extra       |
++----+-------------+-------+--------+---------------+---------+---------+------------------+------+-------------+
+|  1 | SIMPLE      | o     | range  | idx_status    | idx_... | 4       | NULL             | 5000 | Using where |
+|  1 | SIMPLE      | u     | eq_ref | PRIMARY       | PRIMARY | 4       | mydb.o.user_id   |    1 | NULL        |
+|  1 | SIMPLE      | oi    | ref    | idx_order     | idx_... | 4       | mydb.o.id        |    3 | Using index |
++----+-------------+-------+--------+---------------+---------+---------+------------------+------+-------------+
+```
+
+## Indexing Strategies
+
+### Composite Index Design
+
+Design indexes based on query patterns:
+
+```sql
+-- Query pattern: Filter by status, date range, sort by date
+SELECT * FROM orders 
+WHERE status = 'pending' 
+AND created_at > '2024-01-01'
+ORDER BY created_at DESC;
+
+-- Optimal composite index (leftmost prefix rule)
+CREATE INDEX idx_orders_status_created 
+ON orders(status, created_at);
+
+-- For queries with multiple equality conditions
+SELECT * FROM products
+WHERE category_id = 5
+AND brand_id = 10
+AND is_active = 1;
+
+-- Index with most selective column first
+CREATE INDEX idx_products_brand_cat_active
+ON products(brand_id, category_id, is_active);
+```
+
+### Covering Indexes
+
+Avoid table lookups with covering indexes:
+
+```sql
+-- Query only needs specific columns
+SELECT id, name, price FROM products
+WHERE category_id = 5
+ORDER BY price;
+
+-- Covering index includes all needed columns
+CREATE INDEX idx_products_covering
+ON products(category_id, price, id, name);
+
+-- MySQL can satisfy query entirely from index
+-- EXPLAIN shows "Using index" in Extra column
+```
+
+### Index for JOIN Operations
+
+```sql
+-- Ensure foreign keys are indexed
+CREATE INDEX idx_orders_user_id ON orders(user_id);
+CREATE INDEX idx_order_items_order_id ON order_items(order_id);
+CREATE INDEX idx_order_items_product_id ON order_items(product_id);
+
+-- For complex joins, index the join columns
+SELECT p.name, SUM(oi.quantity) as total_sold
+FROM products p
+JOIN order_items oi ON p.id = oi.product_id
+JOIN orders o ON oi.order_id = o.id
+WHERE o.created_at > '2024-01-01'
+GROUP BY p.id
+ORDER BY total_sold DESC;
+
+-- Indexes needed:
+-- orders(created_at) - for WHERE filter
+-- order_items(order_id) - for JOIN
+-- order_items(product_id) - for JOIN
+```
+
+<Note title="Index Tip">
+Don't over-index! Each index slows down INSERT/UPDATE operations. Monitor unused indexes with `sys.schema_unused_indexes`.
+</Note>
+
+## Query Optimization Techniques
+
+### Avoiding Full Table Scans
+
+```sql
+-- Bad: Function on indexed column prevents index use
+SELECT * FROM users WHERE YEAR(created_at) = 2024;
+
+-- Good: Range query uses index
+SELECT * FROM users 
+WHERE created_at >= '2024-01-01' 
+AND created_at < '2025-01-01';
+
+-- Bad: Leading wildcard prevents index use
+SELECT * FROM products WHERE name LIKE '%phone%';
+
+-- Good: Trailing wildcard can use index
+SELECT * FROM products WHERE name LIKE 'phone%';
+
+-- For full-text search, use FULLTEXT index
+ALTER TABLE products ADD FULLTEXT INDEX ft_name (name);
+SELECT * FROM products WHERE MATCH(name) AGAINST('phone');
+```
+
+### Optimizing Subqueries
+
+```sql
+-- Bad: Correlated subquery runs for each row
+SELECT * FROM products p
+WHERE price > (
+    SELECT AVG(price) FROM products 
+    WHERE category_id = p.category_id
+);
+
+-- Good: JOIN with derived table
+SELECT p.* FROM products p
+JOIN (
+    SELECT category_id, AVG(price) as avg_price
+    FROM products
+    GROUP BY category_id
+) cat_avg ON p.category_id = cat_avg.category_id
+WHERE p.price > cat_avg.avg_price;
+
+-- Even better: Window function (MySQL 8.0+)
+SELECT * FROM (
+    SELECT *, AVG(price) OVER (PARTITION BY category_id) as avg_price
+    FROM products
+) t WHERE price > avg_price;
+```
+
+### Pagination Optimization
+
+```sql
+-- Bad: OFFSET scans and discards rows
+SELECT * FROM products ORDER BY id LIMIT 10 OFFSET 100000;
+
+-- Good: Keyset pagination (cursor-based)
+SELECT * FROM products 
+WHERE id > 100000  -- Last seen ID
+ORDER BY id 
+LIMIT 10;
+
+-- For complex sorting, use deferred join
+SELECT p.* FROM products p
+JOIN (
+    SELECT id FROM products
+    ORDER BY created_at DESC, id DESC
+    LIMIT 10 OFFSET 100000
+) t ON p.id = t.id;
+```
+
+## Server Configuration Tuning
+
+### InnoDB Buffer Pool
+
+```ini
+# my.cnf - For dedicated database server with 32GB RAM
+
+[mysqld]
+# Buffer pool should be 70-80% of available RAM
+innodb_buffer_pool_size = 24G
+innodb_buffer_pool_instances = 24
+
+# Log file size affects recovery time vs write performance
+innodb_log_file_size = 2G
+innodb_log_buffer_size = 64M
+
+# Flush settings (1 = safest, 2 = faster)
+innodb_flush_log_at_trx_commit = 1
+innodb_flush_method = O_DIRECT
+
+# Thread concurrency
+innodb_thread_concurrency = 0
+innodb_read_io_threads = 8
+innodb_write_io_threads = 8
+```
+
+### Query Cache and Memory Settings
+
+```ini
+[mysqld]
+# Connection handling
+max_connections = 500
+thread_cache_size = 100
+
+# Memory per connection
+sort_buffer_size = 4M
+join_buffer_size = 4M
+read_buffer_size = 2M
+read_rnd_buffer_size = 8M
+
+# Temporary tables
+tmp_table_size = 256M
+max_heap_table_size = 256M
+
+# Table cache
+table_open_cache = 4000
+table_definition_cache = 2000
+```
+
+## Monitoring and Profiling
+
+### Slow Query Log
+
+```ini
+[mysqld]
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 1
+log_queries_not_using_indexes = 1
+```
+
+### Performance Schema Queries
+
+```sql
+-- Find top 10 slowest queries
+SELECT 
+    DIGEST_TEXT,
+    COUNT_STAR as exec_count,
+    ROUND(SUM_TIMER_WAIT/1000000000000, 2) as total_time_sec,
+    ROUND(AVG_TIMER_WAIT/1000000000, 2) as avg_time_ms,
+    SUM_ROWS_EXAMINED,
+    SUM_ROWS_SENT
+FROM performance_schema.events_statements_summary_by_digest
+ORDER BY SUM_TIMER_WAIT DESC
+LIMIT 10;
+
+-- Find tables with most I/O
+SELECT 
+    object_schema,
+    object_name,
+    count_read,
+    count_write,
+    ROUND(sum_timer_read/1000000000000, 2) as read_time_sec,
+    ROUND(sum_timer_write/1000000000000, 2) as write_time_sec
+FROM performance_schema.table_io_waits_summary_by_table
+ORDER BY sum_timer_wait DESC
+LIMIT 10;
+
+-- Find unused indexes
+SELECT * FROM sys.schema_unused_indexes;
+
+-- Find redundant indexes
+SELECT * FROM sys.schema_redundant_indexes;
+```
+
+### Real-time Monitoring
+
+```sql
+-- Current running queries
+SELECT 
+    id,
+    user,
+    host,
+    db,
+    command,
+    time,
+    state,
+    LEFT(info, 100) as query
+FROM information_schema.processlist
+WHERE command != 'Sleep'
+ORDER BY time DESC;
+
+-- InnoDB status
+SHOW ENGINE INNODB STATUS\G
+
+-- Buffer pool hit ratio (should be > 99%)
+SELECT 
+    (1 - (
+        (SELECT variable_value FROM performance_schema.global_status WHERE variable_name = 'Innodb_buffer_pool_reads') /
+        (SELECT variable_value FROM performance_schema.global_status WHERE variable_name = 'Innodb_buffer_pool_read_requests')
+    )) * 100 as buffer_pool_hit_ratio;
+```
+
+## Partitioning for Large Tables
+
+```sql
+-- Range partitioning by date
+CREATE TABLE orders (
+    id BIGINT AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    total DECIMAL(10,2),
+    status VARCHAR(20),
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY (id, created_at),
+    INDEX idx_user (user_id, created_at)
+) PARTITION BY RANGE (YEAR(created_at)) (
+    PARTITION p2022 VALUES LESS THAN (2023),
+    PARTITION p2023 VALUES LESS THAN (2024),
+    PARTITION p2024 VALUES LESS THAN (2025),
+    PARTITION p_future VALUES LESS THAN MAXVALUE
+);
+
+-- Queries automatically prune partitions
+SELECT * FROM orders 
+WHERE created_at >= '2024-01-01' 
+AND created_at < '2024-07-01';
+-- Only scans p2024 partition
+```
+
+## Connection Pooling
+
+### Application-Level Pooling
+
+```javascript
+// Node.js with mysql2
+const mysql = require('mysql2/promise');
+
+const pool = mysql.createPool({
+  host: 'localhost',
+  user: 'app_user',
+  password: 'password',
+  database: 'myapp',
+  waitForConnections: true,
+  connectionLimit: 20,
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000
+});
+
+// Use pool for queries
+async function getUser(id) {
+  const [rows] = await pool.execute(
+    'SELECT * FROM users WHERE id = ?',
+    [id]
+  );
+  return rows[0];
+}
+```
+
+## Conclusion
+
+MySQL performance optimization is an iterative process. Start by identifying slow queries with the slow query log, analyze them with EXPLAIN, add appropriate indexes, and monitor the results. Server configuration should be tuned based on your workload characteristics and available resources.
+
+Key takeaways:
+- Design indexes based on actual query patterns
+- Use EXPLAIN to understand query execution
+- Avoid functions on indexed columns in WHERE clauses
+- Configure InnoDB buffer pool appropriately
+- Monitor continuously with Performance Schema
+
+<CTA href="https://dev.mysql.com/doc/refman/8.0/en/optimization.html">MySQL Optimization Guide</CTA>

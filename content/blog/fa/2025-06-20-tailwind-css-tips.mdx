@@ -1,0 +1,141 @@
+---
+title: "۱۰ نکته Tailwind CSS برای بهره‌وری بیشتر"
+description: "نکات و ترفندهای کاربردی برای نوشتن کد تمیزتر با Tailwind CSS و افزایش سرعت توسعه."
+date: "2025-06-20"
+tags: ["Tailwind CSS", "CSS", "فرانت‌اند", "بهره‌وری"]
+hero: "/images/posts/tailwind-hero.png"
+draft: false
+---
+
+Tailwind CSS نحوه نوشتن CSS را متحول کرده است. در اینجا ۱۰ نکته برای استفاده بهتر از آن آورده شده است.
+
+## ۱. از دستور `@apply` کم استفاده کنید
+
+اگرچه `@apply` مفید است، اما استفاده بیش از حد از آن هدف CSS مبتنی بر utility را از بین می‌برد:
+
+```css
+/* ❌ از این الگو اجتناب کنید */
+.btn {
+  @apply px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600;
+}
+
+/* ✅ بهتر: یک کامپوننت بسازید */
+```
+
+به جای آن، کامپوننت‌های React/Vue بسازید که استایل‌ها را کپسوله می‌کنند.
+
+## ۲. از مودیفایرهای `group` و `peer` استفاده کنید
+
+استایل‌دهی به المان‌های فرزند بر اساس وضعیت والد:
+
+```html
+<div class="group">
+  <h3 class="group-hover:text-blue-500">عنوان</h3>
+  <p class="group-hover:text-gray-700">توضیحات</p>
+</div>
+```
+
+## ۳. از مقادیر دلخواه استفاده کنید
+
+وقتی به مقدار خاصی نیاز دارید که در مقیاس پیش‌فرض نیست:
+
+```html
+<div class="w-[137px] h-[42px] bg-[#1da1f2]">
+  ابعاد و رنگ سفارشی
+</div>
+```
+
+<Callout type="info">
+مقادیر دلخواه برای طراحی‌های یکباره عالی هستند، اما اگر مکرراً از آن‌ها استفاده می‌کنید، تم خود را گسترش دهید.
+</Callout>
+
+## ۴. تم خود را گسترش دهید
+
+مقادیر سفارشی را به `tailwind.config.js` اضافه کنید:
+
+```javascript
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          50: '#f0f9ff',
+          500: '#0ea5e9',
+          900: '#0c4a6e',
+        },
+      },
+      spacing: {
+        '128': '32rem',
+      },
+    },
+  },
+};
+```
+
+## ۵. از کلاس `prose` برای محتوا استفاده کنید
+
+پلاگین Typography استایل‌دهی به محتوای markdown را آسان می‌کند:
+
+```html
+<article class="prose lg:prose-xl dark:prose-invert">
+  <!-- محتوای markdown شما -->
+</article>
+```
+
+## ۶. طراحی واکنش‌گرا با اولویت موبایل
+
+همیشه ابتدا برای موبایل طراحی کنید:
+
+```html
+<div class="text-sm md:text-base lg:text-lg">
+  متن واکنش‌گرا
+</div>
+```
+
+<Note title="به یاد داشته باشید">
+کلاس‌های بدون پیشوند برای همه اندازه‌های صفحه اعمال می‌شوند. کلاس‌های با پیشوند (sm:, md:, lg:) از آن breakpoint به بالا اعمال می‌شوند.
+</Note>
+
+## ۷. پشتیبانی از حالت تاریک
+
+حالت تاریک را با variant `dark:` فعال کنید:
+
+```html
+<div class="bg-white dark:bg-gray-900 text-gray-900 dark:text-white">
+  از حالت تاریک پشتیبانی می‌کند
+</div>
+```
+
+## ۸. از Container Queries استفاده کنید
+
+Tailwind نسخه ۳.۲ به بالا از container queries پشتیبانی می‌کند:
+
+```html
+<div class="@container">
+  <div class="@lg:flex @lg:gap-4">
+    به اندازه container پاسخ می‌دهد
+  </div>
+</div>
+```
+
+## ۹. با پلاگین Prettier سازماندهی کنید
+
+پلاگین Prettier را برای مرتب‌سازی خودکار کلاس‌ها نصب کنید:
+
+```bash
+npm install -D prettier-plugin-tailwindcss
+```
+
+## ۱۰. از VS Code IntelliSense استفاده کنید
+
+افزونه Tailwind CSS IntelliSense را برای موارد زیر نصب کنید:
+- تکمیل خودکار
+- بررسی خطا
+- پیش‌نمایش هاور
+- هایلایت سینتکس
+
+## نتیجه‌گیری
+
+این نکات به شما کمک می‌کنند کد Tailwind CSS تمیزتری بنویسید و گردش کار توسعه خود را بهبود بخشید. کلید موفقیت پذیرش رویکرد utility-first است در حالی که می‌دانید چه زمانی باید انتزاع کنید.
+
+<CTA href="https://tailwindcss.com/docs">مستندات Tailwind</CTA>

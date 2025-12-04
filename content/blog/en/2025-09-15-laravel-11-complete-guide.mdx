@@ -1,0 +1,488 @@
+---
+title: "Laravel 11: The Complete Guide to Building Modern PHP Applications"
+description: "Master Laravel 11 with this comprehensive guide covering new features, best practices, performance optimization, and real-world application architecture patterns."
+date: "2025-09-15"
+tags: ["Laravel", "PHP", "Backend", "Web Development", "API"]
+hero: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=1200&h=630&fit=crop"
+draft: false
+---
+
+Laravel 11 represents a significant evolution in PHP web development, introducing streamlined application structure, improved performance, and developer-friendly features that make building robust applications faster than ever.
+
+## What's New in Laravel 11
+
+Laravel 11 brings revolutionary changes to how we structure and build applications:
+
+- **Streamlined Application Structure** - Simplified directory layout with fewer boilerplate files
+- **Per-Second Rate Limiting** - More granular control over API throttling
+- **Health Routing** - Built-in health check endpoints for container orchestration
+- **Graceful Encryption Key Rotation** - Seamless key rotation without data loss
+- **Improved Artisan Commands** - Enhanced CLI experience with better output
+
+<Callout type="info">
+Laravel 11 requires PHP 8.2 or higher, taking full advantage of modern PHP features like readonly classes and improved type system.
+</Callout>
+
+## Setting Up a Laravel 11 Project
+
+Getting started with Laravel 11 is straightforward:
+
+```bash
+# Create a new Laravel project
+composer create-project laravel/laravel my-app
+
+# Or use the Laravel installer
+laravel new my-app
+
+# Navigate to your project
+cd my-app
+
+# Start the development server
+php artisan serve
+```
+
+### Environment Configuration
+
+Configure your `.env` file for your development environment:
+
+```env
+APP_NAME="My Application"
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://localhost:8000
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=my_app
+DB_USERNAME=root
+DB_PASSWORD=
+
+CACHE_DRIVER=redis
+QUEUE_CONNECTION=redis
+SESSION_DRIVER=redis
+```
+
+## Application Architecture Best Practices
+
+### Service Layer Pattern
+
+Implement a clean service layer to separate business logic from controllers:
+
+```php
+<?php
+
+namespace App\Services;
+
+use App\Models\User;
+use App\DTOs\CreateUserDTO;
+use App\Events\UserCreated;
+use Illuminate\Support\Facades\Hash;
+
+class UserService
+{
+    public function createUser(CreateUserDTO $dto): User
+    {
+        $user = User::create([
+            'name' => $dto->name,
+            'email' => $dto->email,
+            'password' => Hash::make($dto->password),
+        ]);
+
+        event(new UserCreated($user));
+
+        return $user;
+    }
+
+    public function updateUser(User $user, array $data): User
+    {
+        $user->update($data);
+        return $user->fresh();
+    }
+}
+```
+
+### Repository Pattern
+
+Abstract database operations for better testability:
+
+```php
+<?php
+
+namespace App\Repositories;
+
+use App\Models\Product;
+use Illuminate\Pagination\LengthAwarePaginator;
+
+interface ProductRepositoryInterface
+{
+    public function findById(int $id): ?Product;
+    public function paginate(int $perPage = 15): LengthAwarePaginator;
+    public function findByCategory(string $category): Collection;
+}
+
+class ProductRepository implements ProductRepositoryInterface
+{
+    public function __construct(
+        private readonly Product $model
+    ) {}
+
+    public function findById(int $id): ?Product
+    {
+        return $this->model
+            ->with(['category', 'images'])
+            ->find($id);
+    }
+
+    public function paginate(int $perPage = 15): LengthAwarePaginator
+    {
+        return $this->model
+            ->with('category')
+            ->latest()
+            ->paginate($perPage);
+    }
+
+    public function findByCategory(string $category): Collection
+    {
+        return $this->model
+            ->whereHas('category', fn($q) => $q->where('slug', $category))
+            ->get();
+    }
+}
+```
+
+<Note title="Architecture Tip">
+Use interfaces for your repositories to enable easy mocking in tests and potential implementation swapping.
+</Note>
+
+## Building RESTful APIs
+
+### API Resource Controllers
+
+Create clean, consistent API endpoints:
+
+```php
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreProductRequest;
+use App\Http\Resources\ProductResource;
+use App\Services\ProductService;
+
+class ProductController extends Controller
+{
+    public function __construct(
+        private readonly ProductService $productService
+    ) {}
+
+    public function index()
+    {
+        $products = $this->productService->getPaginatedProducts();
+        
+        return ProductResource::collection($products);
+    }
+
+    public function store(StoreProductRequest $request)
+    {
+        $product = $this->productService->createProduct(
+            $request->validated()
+        );
+
+        return new ProductResource($product);
+    }
+
+    public function show(Product $product)
+    {
+        return new ProductResource(
+            $product->load(['category', 'reviews'])
+        );
+    }
+}
+```
+
+### API Resources for Consistent Responses
+
+```php
+<?php
+
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class ProductResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'slug' => $this->slug,
+            'description' => $this->description,
+            'price' => [
+                'amount' => $this->price,
+                'formatted' => number_format($this->price, 2),
+                'currency' => 'USD',
+            ],
+            'category' => new CategoryResource($this->whenLoaded('category')),
+            'images' => ImageResource::collection($this->whenLoaded('images')),
+            'in_stock' => $this->stock > 0,
+            'created_at' => $this->created_at->toISOString(),
+        ];
+    }
+}
+```
+
+## Database Optimization
+
+### Eloquent Query Optimization
+
+Avoid N+1 queries with eager loading:
+
+```php
+// Bad - N+1 query problem
+$posts = Post::all();
+foreach ($posts as $post) {
+    echo $post->author->name; // Query for each post!
+}
+
+// Good - Eager loading
+$posts = Post::with(['author', 'comments.user'])->get();
+foreach ($posts as $post) {
+    echo $post->author->name; // No additional queries
+}
+```
+
+### Database Indexing Strategy
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('orders', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->string('status')->index();
+            $table->decimal('total', 10, 2);
+            $table->timestamp('completed_at')->nullable()->index();
+            $table->timestamps();
+
+            // Composite index for common queries
+            $table->index(['user_id', 'status']);
+            $table->index(['status', 'created_at']);
+        });
+    }
+};
+```
+
+## Caching Strategies
+
+### Multi-Layer Caching
+
+```php
+<?php
+
+namespace App\Services;
+
+use App\Models\Product;
+use Illuminate\Support\Facades\Cache;
+
+class ProductService
+{
+    public function getFeaturedProducts(): Collection
+    {
+        return Cache::tags(['products', 'featured'])
+            ->remember('featured_products', 3600, function () {
+                return Product::where('featured', true)
+                    ->with('category')
+                    ->limit(12)
+                    ->get();
+            });
+    }
+
+    public function invalidateFeaturedCache(): void
+    {
+        Cache::tags(['products', 'featured'])->flush();
+    }
+}
+```
+
+### Query Caching with Redis
+
+```php
+// config/database.php
+'redis' => [
+    'client' => env('REDIS_CLIENT', 'phpredis'),
+    'default' => [
+        'host' => env('REDIS_HOST', '127.0.0.1'),
+        'password' => env('REDIS_PASSWORD'),
+        'port' => env('REDIS_PORT', '6379'),
+        'database' => env('REDIS_DB', '0'),
+    ],
+    'cache' => [
+        'host' => env('REDIS_HOST', '127.0.0.1'),
+        'password' => env('REDIS_PASSWORD'),
+        'port' => env('REDIS_PORT', '6379'),
+        'database' => env('REDIS_CACHE_DB', '1'),
+    ],
+],
+```
+
+## Queue Processing
+
+### Job Classes for Background Processing
+
+```php
+<?php
+
+namespace App\Jobs;
+
+use App\Models\Order;
+use App\Services\PaymentService;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+
+class ProcessOrderPayment implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public int $tries = 3;
+    public int $backoff = 60;
+
+    public function __construct(
+        public readonly Order $order
+    ) {}
+
+    public function handle(PaymentService $paymentService): void
+    {
+        $paymentService->processPayment($this->order);
+    }
+
+    public function failed(\Throwable $exception): void
+    {
+        // Notify admin about failed payment
+        logger()->error('Payment failed', [
+            'order_id' => $this->order->id,
+            'error' => $exception->getMessage(),
+        ]);
+    }
+}
+```
+
+## Testing Best Practices
+
+### Feature Tests
+
+```php
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\User;
+use App\Models\Product;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class ProductApiTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_can_list_products(): void
+    {
+        Product::factory()->count(5)->create();
+
+        $response = $this->getJson('/api/products');
+
+        $response->assertOk()
+            ->assertJsonCount(5, 'data')
+            ->assertJsonStructure([
+                'data' => [
+                    '*' => ['id', 'name', 'price', 'created_at']
+                ]
+            ]);
+    }
+
+    public function test_authenticated_user_can_create_product(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)
+            ->postJson('/api/products', [
+                'name' => 'Test Product',
+                'price' => 99.99,
+                'description' => 'A test product',
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.name', 'Test Product');
+
+        $this->assertDatabaseHas('products', [
+            'name' => 'Test Product',
+        ]);
+    }
+}
+```
+
+## Performance Monitoring
+
+### Using Laravel Telescope
+
+```bash
+composer require laravel/telescope --dev
+php artisan telescope:install
+php artisan migrate
+```
+
+### Custom Performance Middleware
+
+```php
+<?php
+
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+
+class MeasureResponseTime
+{
+    public function handle(Request $request, Closure $next)
+    {
+        $startTime = microtime(true);
+
+        $response = $next($request);
+
+        $duration = (microtime(true) - $startTime) * 1000;
+
+        if ($duration > 500) {
+            Log::warning('Slow request detected', [
+                'url' => $request->fullUrl(),
+                'method' => $request->method(),
+                'duration_ms' => round($duration, 2),
+            ]);
+        }
+
+        return $response->header('X-Response-Time', round($duration, 2) . 'ms');
+    }
+}
+```
+
+## Conclusion
+
+Laravel 11 provides a powerful, elegant framework for building modern PHP applications. By following these best practices—implementing clean architecture patterns, optimizing database queries, leveraging caching, and writing comprehensive tests—you can build applications that are maintainable, scalable, and performant.
+
+The key to success with Laravel is understanding its conventions while knowing when to apply additional architectural patterns for complex applications.
+
+<CTA href="https://laravel.com/docs/11.x">Explore Laravel 11 Documentation</CTA>

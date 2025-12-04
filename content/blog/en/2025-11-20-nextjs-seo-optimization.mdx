@@ -1,0 +1,574 @@
+---
+title: "Next.js SEO Optimization: Complete Guide to Ranking Higher"
+description: "Master SEO in Next.js with metadata optimization, structured data, Core Web Vitals, sitemaps, and advanced techniques for better search engine rankings."
+date: "2025-11-20"
+tags: ["Next.js", "SEO", "React", "Web Development", "Performance"]
+hero: "https://images.unsplash.com/photo-1432888498266-38ffec3eaf0a?w=1200&h=630&fit=crop"
+draft: false
+---
+
+SEO is crucial for any website's success. Next.js provides powerful tools for building SEO-friendly applications. This guide covers everything from basic metadata to advanced optimization techniques.
+
+## Metadata API in Next.js 15
+
+### Static Metadata
+
+```typescript
+// app/page.tsx
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Home | My Website',
+  description: 'Welcome to my website. We offer the best products and services.',
+  keywords: ['products', 'services', 'quality'],
+  authors: [{ name: 'John Doe', url: 'https://johndoe.com' }],
+  creator: 'John Doe',
+  publisher: 'My Company',
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: 'https://mywebsite.com',
+    siteName: 'My Website',
+    title: 'Home | My Website',
+    description: 'Welcome to my website',
+    images: [
+      {
+        url: 'https://mywebsite.com/og-image.jpg',
+        width: 1200,
+        height: 630,
+        alt: 'My Website',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Home | My Website',
+    description: 'Welcome to my website',
+    creator: '@johndoe',
+    images: ['https://mywebsite.com/twitter-image.jpg'],
+  },
+  alternates: {
+    canonical: 'https://mywebsite.com',
+    languages: {
+      'en-US': 'https://mywebsite.com/en',
+      'fa-IR': 'https://mywebsite.com/fa',
+    },
+  },
+};
+
+export default function HomePage() {
+  return <main>...</main>;
+}
+```
+
+<Callout type="info">
+Always include Open Graph and Twitter Card metadata for better social media sharing previews.
+</Callout>
+
+### Dynamic Metadata
+
+```typescript
+// app/blog/[slug]/page.tsx
+import type { Metadata } from 'next';
+import { getPostBySlug } from '@/lib/posts';
+
+interface Props {
+  params: { slug: string };
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const post = await getPostBySlug(params.slug);
+
+  if (!post) {
+    return {
+      title: 'Post Not Found',
+    };
+  }
+
+  return {
+    title: `${post.title} | My Blog`,
+    description: post.excerpt,
+    authors: [{ name: post.author.name }],
+    openGraph: {
+      type: 'article',
+      title: post.title,
+      description: post.excerpt,
+      url: `https://mywebsite.com/blog/${params.slug}`,
+      publishedTime: post.publishedAt,
+      modifiedTime: post.updatedAt,
+      authors: [post.author.name],
+      images: [
+        {
+          url: post.coverImage,
+          width: 1200,
+          height: 630,
+          alt: post.title,
+        },
+      ],
+      tags: post.tags,
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: post.title,
+      description: post.excerpt,
+      images: [post.coverImage],
+    },
+  };
+}
+```
+
+### Metadata Template
+
+```typescript
+// app/layout.tsx
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  metadataBase: new URL('https://mywebsite.com'),
+  title: {
+    default: 'My Website',
+    template: '%s | My Website', // Dynamic pages will use this template
+  },
+  description: 'Default description for my website',
+  openGraph: {
+    type: 'website',
+    siteName: 'My Website',
+  },
+};
+```
+
+## Structured Data (JSON-LD)
+
+### Organization Schema
+
+```typescript
+// components/StructuredData.tsx
+export function OrganizationSchema() {
+  const schema = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'My Company',
+    url: 'https://mywebsite.com',
+    logo: 'https://mywebsite.com/logo.png',
+    sameAs: [
+      'https://twitter.com/mycompany',
+      'https://linkedin.com/company/mycompany',
+      'https://github.com/mycompany',
+    ],
+    contactPoint: {
+      '@type': 'ContactPoint',
+      telephone: '+1-555-555-5555',
+      contactType: 'customer service',
+      availableLanguage: ['English', 'Persian'],
+    },
+  };
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+    />
+  );
+}
+```
+
+### Article Schema
+
+```typescript
+// components/ArticleSchema.tsx
+interface ArticleSchemaProps {
+  title: string;
+  description: string;
+  image: string;
+  datePublished: string;
+  dateModified: string;
+  author: {
+    name: string;
+    url: string;
+  };
+  url: string;
+}
+
+export function ArticleSchema({
+  title,
+  description,
+  image,
+  datePublished,
+  dateModified,
+  author,
+  url,
+}: ArticleSchemaProps) {
+  const schema = {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: title,
+    description: description,
+    image: image,
+    datePublished: datePublished,
+    dateModified: dateModified,
+    author: {
+      '@type': 'Person',
+      name: author.name,
+      url: author.url,
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'My Website',
+      logo: {
+        '@type': 'ImageObject',
+        url: 'https://mywebsite.com/logo.png',
+      },
+    },
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': url,
+    },
+  };
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+    />
+  );
+}
+```
+
+<Note title="Schema Tip">
+Use Google's Rich Results Test to validate your structured data: https://search.google.com/test/rich-results
+</Note>
+
+### Product Schema for E-commerce
+
+```typescript
+export function ProductSchema({ product }) {
+  const schema = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    description: product.description,
+    image: product.images,
+    sku: product.sku,
+    brand: {
+      '@type': 'Brand',
+      name: product.brand,
+    },
+    offers: {
+      '@type': 'Offer',
+      url: `https://mywebsite.com/products/${product.slug}`,
+      priceCurrency: 'USD',
+      price: product.price,
+      availability: product.inStock
+        ? 'https://schema.org/InStock'
+        : 'https://schema.org/OutOfStock',
+      seller: {
+        '@type': 'Organization',
+        name: 'My Store',
+      },
+    },
+    aggregateRating: product.reviews.length > 0 ? {
+      '@type': 'AggregateRating',
+      ratingValue: product.averageRating,
+      reviewCount: product.reviews.length,
+    } : undefined,
+  };
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+    />
+  );
+}
+```
+
+## Sitemap Generation
+
+### Dynamic Sitemap
+
+```typescript
+// app/sitemap.ts
+import { MetadataRoute } from 'next';
+import { getAllPosts } from '@/lib/posts';
+import { getAllProducts } from '@/lib/products';
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const baseUrl = 'https://mywebsite.com';
+
+  // Static pages
+  const staticPages = [
+    {
+      url: baseUrl,
+      lastModified: new Date(),
+      changeFrequency: 'daily' as const,
+      priority: 1,
+    },
+    {
+      url: `${baseUrl}/about`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly' as const,
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/contact`,
+      lastModified: new Date(),
+      changeFrequency: 'monthly' as const,
+      priority: 0.8,
+    },
+  ];
+
+  // Blog posts
+  const posts = await getAllPosts();
+  const blogPages = posts.map((post) => ({
+    url: `${baseUrl}/blog/${post.slug}`,
+    lastModified: new Date(post.updatedAt),
+    changeFrequency: 'weekly' as const,
+    priority: 0.7,
+  }));
+
+  // Products
+  const products = await getAllProducts();
+  const productPages = products.map((product) => ({
+    url: `${baseUrl}/products/${product.slug}`,
+    lastModified: new Date(product.updatedAt),
+    changeFrequency: 'daily' as const,
+    priority: 0.9,
+  }));
+
+  return [...staticPages, ...blogPages, ...productPages];
+}
+```
+
+### Robots.txt
+
+```typescript
+// app/robots.ts
+import { MetadataRoute } from 'next';
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: '*',
+        allow: '/',
+        disallow: ['/api/', '/admin/', '/private/'],
+      },
+      {
+        userAgent: 'Googlebot',
+        allow: '/',
+        disallow: '/api/',
+      },
+    ],
+    sitemap: 'https://mywebsite.com/sitemap.xml',
+  };
+}
+```
+
+## Core Web Vitals Optimization
+
+### Image Optimization
+
+```typescript
+import Image from 'next/image';
+
+// Optimized image component
+export function OptimizedImage({ src, alt, priority = false }) {
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      width={800}
+      height={600}
+      priority={priority} // Set true for above-the-fold images
+      placeholder="blur"
+      blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+      className="object-cover"
+    />
+  );
+}
+
+// Hero image with priority loading
+export function HeroSection() {
+  return (
+    <section>
+      <Image
+        src="/hero.jpg"
+        alt="Hero image"
+        fill
+        priority // Critical for LCP
+        sizes="100vw"
+        className="object-cover"
+      />
+    </section>
+  );
+}
+```
+
+### Font Optimization
+
+```typescript
+// app/layout.tsx
+import { Inter, Vazirmatn } from 'next/font/google';
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+});
+
+const vazirmatn = Vazirmatn({
+  subsets: ['arabic'],
+  display: 'swap',
+  variable: '--font-vazirmatn',
+});
+
+export default function RootLayout({ children }) {
+  return (
+    <html className={`${inter.variable} ${vazirmatn.variable}`}>
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+### Script Optimization
+
+```typescript
+import Script from 'next/script';
+
+export function Analytics() {
+  return (
+    <>
+      {/* Load after page is interactive */}
+      <Script
+        src="https://www.googletagmanager.com/gtag/js?id=GA_ID"
+        strategy="afterInteractive"
+      />
+      <Script id="google-analytics" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'GA_ID');
+        `}
+      </Script>
+
+      {/* Load when browser is idle */}
+      <Script
+        src="https://third-party-script.js"
+        strategy="lazyOnload"
+      />
+    </>
+  );
+}
+```
+
+## Internationalization SEO
+
+### Hreflang Tags
+
+```typescript
+// app/[locale]/layout.tsx
+import type { Metadata } from 'next';
+
+export async function generateMetadata({ params }): Promise<Metadata> {
+  const { locale } = params;
+  
+  return {
+    alternates: {
+      canonical: `https://mywebsite.com/${locale}`,
+      languages: {
+        'en': 'https://mywebsite.com/en',
+        'fa': 'https://mywebsite.com/fa',
+        'x-default': 'https://mywebsite.com/en',
+      },
+    },
+  };
+}
+```
+
+### Localized Sitemap
+
+```typescript
+// app/sitemap.ts
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const locales = ['en', 'fa'];
+  const baseUrl = 'https://mywebsite.com';
+
+  const pages = ['', '/about', '/contact', '/blog'];
+
+  return pages.flatMap((page) =>
+    locales.map((locale) => ({
+      url: `${baseUrl}/${locale}${page}`,
+      lastModified: new Date(),
+      alternates: {
+        languages: Object.fromEntries(
+          locales.map((l) => [l, `${baseUrl}/${l}${page}`])
+        ),
+      },
+    }))
+  );
+}
+```
+
+## Performance Monitoring
+
+### Web Vitals Tracking
+
+```typescript
+// app/components/WebVitals.tsx
+'use client';
+
+import { useReportWebVitals } from 'next/web-vitals';
+
+export function WebVitals() {
+  useReportWebVitals((metric) => {
+    // Send to analytics
+    const body = JSON.stringify({
+      name: metric.name,
+      value: metric.value,
+      rating: metric.rating,
+      delta: metric.delta,
+      id: metric.id,
+    });
+
+    // Use sendBeacon for reliability
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon('/api/analytics/vitals', body);
+    } else {
+      fetch('/api/analytics/vitals', {
+        body,
+        method: 'POST',
+        keepalive: true,
+      });
+    }
+  });
+
+  return null;
+}
+```
+
+## Conclusion
+
+SEO in Next.js is about combining technical optimization with great content. By implementing proper metadata, structured data, sitemaps, and Core Web Vitals optimization, you can significantly improve your search engine rankings.
+
+Key takeaways:
+- Use the Metadata API for comprehensive meta tags
+- Implement structured data for rich search results
+- Generate dynamic sitemaps for all content
+- Optimize images, fonts, and scripts for Core Web Vitals
+- Handle internationalization with proper hreflang tags
+
+<CTA href="https://nextjs.org/docs/app/building-your-application/optimizing/metadata">Next.js Metadata Documentation</CTA>

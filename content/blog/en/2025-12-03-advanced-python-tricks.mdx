@@ -1,0 +1,660 @@
+---
+title: "Advanced Python Tricks: Language Features Every Senior Developer Should Know"
+description: "Master advanced Python language features including decorators, metaclasses, descriptors, context managers, generators, and memory optimization techniques."
+date: "2025-12-03"
+tags: ["Python", "Programming", "Backend", "Advanced", "Tips"]
+hero: "https://images.unsplash.com/photo-1526379095098-d400fd0bf935?w=1200&h=630&fit=crop"
+draft: false
+---
+
+Python's simplicity hides incredible depth. This guide explores advanced language features that separate senior developers from the rest—techniques that make code more elegant, efficient, and Pythonic.
+
+## Decorators Deep Dive
+
+### Function Decorators with Arguments
+
+```python
+import functools
+import time
+from typing import Callable, Any
+
+def retry(max_attempts: int = 3, delay: float = 1.0, exceptions: tuple = (Exception,)):
+    """Decorator that retries a function on failure."""
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    if attempt < max_attempts - 1:
+                        time.sleep(delay * (2 ** attempt))  # Exponential backoff
+            raise last_exception
+        return wrapper
+    return decorator
+
+@retry(max_attempts=3, delay=0.5, exceptions=(ConnectionError, TimeoutError))
+def fetch_data(url: str) -> dict:
+    # Simulated API call
+    pass
+```
+
+
+### Class Decorators
+
+```python
+def singleton(cls):
+    """Class decorator that ensures only one instance exists."""
+    instances = {}
+    
+    @functools.wraps(cls)
+    def get_instance(*args, **kwargs):
+        if cls not in instances:
+            instances[cls] = cls(*args, **kwargs)
+        return instances[cls]
+    
+    return get_instance
+
+@singleton
+class DatabaseConnection:
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+        self.connected = False
+    
+    def connect(self):
+        self.connected = True
+
+# Both variables reference the same instance
+db1 = DatabaseConnection("localhost", 5432)
+db2 = DatabaseConnection("different", 3306)  # Ignored, returns existing instance
+assert db1 is db2  # True
+```
+
+### Decorator Stacking and Order
+
+```python
+def log_calls(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        print(f"Calling {func.__name__}")
+        result = func(*args, **kwargs)
+        print(f"Finished {func.__name__}")
+        return result
+    return wrapper
+
+def validate_positive(func):
+    @functools.wraps(func)
+    def wrapper(x, y):
+        if x < 0 or y < 0:
+            raise ValueError("Arguments must be positive")
+        return func(x, y)
+    return wrapper
+
+# Decorators apply bottom-up: validate_positive wraps add, then log_calls wraps that
+@log_calls
+@validate_positive
+def add(x: int, y: int) -> int:
+    return x + y
+
+# Equivalent to: add = log_calls(validate_positive(add))
+```
+
+<Callout type="info">
+Always use `@functools.wraps` to preserve the original function's metadata (name, docstring, annotations).
+</Callout>
+
+## Metaclasses: Classes of Classes
+
+### Understanding Metaclasses
+
+```python
+# Everything in Python is an object, including classes
+class MyClass:
+    pass
+
+print(type(MyClass))  # <class 'type'>
+print(type(type))     # <class 'type'> - type is its own metaclass
+
+# Creating a class dynamically with type()
+DynamicClass = type(
+    'DynamicClass',           # Class name
+    (object,),                # Base classes
+    {'x': 5, 'greet': lambda self: 'Hello'}  # Attributes
+)
+
+obj = DynamicClass()
+print(obj.x)        # 5
+print(obj.greet())  # Hello
+```
+
+### Custom Metaclass
+
+```python
+class ValidatedMeta(type):
+    """Metaclass that validates class attributes."""
+    
+    def __new__(mcs, name, bases, namespace):
+        # Ensure all methods have docstrings
+        for attr_name, attr_value in namespace.items():
+            if callable(attr_value) and not attr_name.startswith('_'):
+                if not attr_value.__doc__:
+                    raise TypeError(
+                        f"Method '{attr_name}' in class '{name}' must have a docstring"
+                    )
+        
+        return super().__new__(mcs, name, bases, namespace)
+
+class APIEndpoint(metaclass=ValidatedMeta):
+    def get(self):
+        """Handle GET requests."""
+        pass
+    
+    def post(self):
+        """Handle POST requests."""
+        pass
+    
+    # This would raise TypeError: no docstring
+    # def delete(self):
+    #     pass
+```
+
+
+### Practical Metaclass: Auto-Registration
+
+```python
+class PluginRegistry(type):
+    """Metaclass that auto-registers all subclasses."""
+    plugins = {}
+    
+    def __new__(mcs, name, bases, namespace):
+        cls = super().__new__(mcs, name, bases, namespace)
+        
+        # Don't register the base class itself
+        if bases != (object,) and bases:
+            plugin_name = namespace.get('name', name.lower())
+            mcs.plugins[plugin_name] = cls
+        
+        return cls
+    
+    @classmethod
+    def get_plugin(mcs, name):
+        return mcs.plugins.get(name)
+
+class Plugin(metaclass=PluginRegistry):
+    """Base class for all plugins."""
+    pass
+
+class JSONPlugin(Plugin):
+    name = 'json'
+    def process(self, data):
+        return json.dumps(data)
+
+class XMLPlugin(Plugin):
+    name = 'xml'
+    def process(self, data):
+        return f"<data>{data}</data>"
+
+# Plugins are automatically registered
+print(PluginRegistry.plugins)  # {'json': <class 'JSONPlugin'>, 'xml': <class 'XMLPlugin'>}
+plugin = PluginRegistry.get_plugin('json')()
+```
+
+## Descriptors: Attribute Access Control
+
+### The Descriptor Protocol
+
+```python
+class Validator:
+    """Base descriptor for validation."""
+    
+    def __set_name__(self, owner, name):
+        self.public_name = name
+        self.private_name = f'_{name}'
+    
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        return getattr(obj, self.private_name, None)
+    
+    def __set__(self, obj, value):
+        self.validate(value)
+        setattr(obj, self.private_name, value)
+    
+    def validate(self, value):
+        pass  # Override in subclasses
+
+class PositiveNumber(Validator):
+    def validate(self, value):
+        if not isinstance(value, (int, float)):
+            raise TypeError(f'{self.public_name} must be a number')
+        if value <= 0:
+            raise ValueError(f'{self.public_name} must be positive')
+
+class NonEmptyString(Validator):
+    def __init__(self, max_length=None):
+        self.max_length = max_length
+    
+    def validate(self, value):
+        if not isinstance(value, str):
+            raise TypeError(f'{self.public_name} must be a string')
+        if not value.strip():
+            raise ValueError(f'{self.public_name} cannot be empty')
+        if self.max_length and len(value) > self.max_length:
+            raise ValueError(f'{self.public_name} cannot exceed {self.max_length} chars')
+
+class Product:
+    name = NonEmptyString(max_length=100)
+    price = PositiveNumber()
+    quantity = PositiveNumber()
+    
+    def __init__(self, name, price, quantity):
+        self.name = name
+        self.price = price
+        self.quantity = quantity
+
+# Validation happens automatically
+product = Product("Widget", 29.99, 100)
+# product.price = -10  # Raises ValueError
+# product.name = ""    # Raises ValueError
+```
+
+<Note title="Descriptor Tip">
+Descriptors are the mechanism behind `@property`, `@classmethod`, and `@staticmethod`. Understanding them unlocks Python's attribute access system.
+</Note>
+
+## Context Managers: Resource Management
+
+### Custom Context Managers
+
+```python
+from contextlib import contextmanager
+import threading
+import time
+
+class Timer:
+    """Context manager for timing code blocks."""
+    
+    def __init__(self, name: str = "Block"):
+        self.name = name
+        self.elapsed = 0
+    
+    def __enter__(self):
+        self.start = time.perf_counter()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.elapsed = time.perf_counter() - self.start
+        print(f"{self.name} took {self.elapsed:.4f} seconds")
+        return False  # Don't suppress exceptions
+
+with Timer("Database query"):
+    time.sleep(0.1)  # Simulated work
+# Output: Database query took 0.1001 seconds
+```
+
+
+### Generator-Based Context Managers
+
+```python
+@contextmanager
+def transaction(connection):
+    """Database transaction context manager."""
+    cursor = connection.cursor()
+    try:
+        yield cursor
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.close()
+
+# Usage
+with transaction(db_connection) as cursor:
+    cursor.execute("INSERT INTO users (name) VALUES (?)", ("John",))
+    cursor.execute("UPDATE accounts SET balance = balance - 100 WHERE user_id = 1")
+    # If any exception occurs, transaction is rolled back
+```
+
+### Reentrant Context Managers
+
+```python
+class ReentrantLock:
+    """A lock that can be acquired multiple times by the same thread."""
+    
+    def __init__(self):
+        self._lock = threading.RLock()
+        self._count = 0
+    
+    def __enter__(self):
+        self._lock.acquire()
+        self._count += 1
+        return self
+    
+    def __exit__(self, *args):
+        self._count -= 1
+        self._lock.release()
+        return False
+
+lock = ReentrantLock()
+
+def outer():
+    with lock:
+        print("Outer acquired")
+        inner()  # Can acquire same lock again
+
+def inner():
+    with lock:  # Same thread, reentrant
+        print("Inner acquired")
+```
+
+## Generators and Iterators
+
+### Generator Pipelines
+
+```python
+def read_large_file(file_path):
+    """Memory-efficient file reading."""
+    with open(file_path, 'r') as f:
+        for line in f:
+            yield line.strip()
+
+def filter_lines(lines, predicate):
+    """Filter lines based on predicate."""
+    for line in lines:
+        if predicate(line):
+            yield line
+
+def transform_lines(lines, transformer):
+    """Transform each line."""
+    for line in lines:
+        yield transformer(line)
+
+def batch_lines(lines, batch_size):
+    """Group lines into batches."""
+    batch = []
+    for line in lines:
+        batch.append(line)
+        if len(batch) >= batch_size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+# Pipeline processes data lazily - memory efficient for large files
+pipeline = batch_lines(
+    transform_lines(
+        filter_lines(
+            read_large_file('huge_log.txt'),
+            lambda line: 'ERROR' in line
+        ),
+        lambda line: line.upper()
+    ),
+    batch_size=100
+)
+
+for batch in pipeline:
+    process_batch(batch)  # Only 100 lines in memory at a time
+```
+
+### Generator Send and Throw
+
+```python
+def coroutine_example():
+    """Coroutine that receives values via send()."""
+    total = 0
+    count = 0
+    average = None
+    
+    while True:
+        try:
+            value = yield average
+            if value is None:
+                break
+            total += value
+            count += 1
+            average = total / count
+        except GeneratorExit:
+            print("Generator closed")
+            return
+
+# Usage
+coro = coroutine_example()
+next(coro)  # Prime the coroutine
+
+print(coro.send(10))   # 10.0
+print(coro.send(20))   # 15.0
+print(coro.send(30))   # 20.0
+
+coro.close()  # Triggers GeneratorExit
+```
+
+### Yield From for Delegation
+
+```python
+def flatten(nested):
+    """Recursively flatten nested iterables."""
+    for item in nested:
+        if isinstance(item, (list, tuple)):
+            yield from flatten(item)  # Delegate to sub-generator
+        else:
+            yield item
+
+nested = [1, [2, 3, [4, 5]], 6, [7, [8, [9]]]]
+print(list(flatten(nested)))  # [1, 2, 3, 4, 5, 6, 7, 8, 9]
+```
+
+## Memory Optimization
+
+### __slots__ for Memory Efficiency
+
+```python
+import sys
+
+class RegularPoint:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+class SlottedPoint:
+    __slots__ = ('x', 'y')
+    
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+regular = RegularPoint(1, 2)
+slotted = SlottedPoint(1, 2)
+
+print(sys.getsizeof(regular.__dict__))  # ~104 bytes for dict
+# slotted has no __dict__, saves memory
+
+# For 1 million points:
+# Regular: ~170 MB
+# Slotted: ~65 MB
+```
+
+
+<Callout type="info">
+Use `__slots__` when creating many instances of a class. It prevents dynamic attribute creation but significantly reduces memory usage.
+</Callout>
+
+### Weak References
+
+```python
+import weakref
+
+class ExpensiveObject:
+    def __init__(self, name):
+        self.name = name
+        self.data = [0] * 1000000  # Large data
+    
+    def __del__(self):
+        print(f"{self.name} is being deleted")
+
+# Cache with weak references - objects can be garbage collected
+class WeakCache:
+    def __init__(self):
+        self._cache = weakref.WeakValueDictionary()
+    
+    def get(self, key, factory):
+        obj = self._cache.get(key)
+        if obj is None:
+            obj = factory()
+            self._cache[key] = obj
+        return obj
+
+cache = WeakCache()
+obj = cache.get('key1', lambda: ExpensiveObject('Object1'))
+
+# When no strong references exist, object can be garbage collected
+del obj  # "Object1 is being deleted" - memory freed
+```
+
+### Interning and Object Reuse
+
+```python
+import sys
+
+# Python interns small integers (-5 to 256)
+a = 256
+b = 256
+print(a is b)  # True - same object
+
+a = 257
+b = 257
+print(a is b)  # False - different objects
+
+# String interning
+s1 = sys.intern('hello_world')
+s2 = sys.intern('hello_world')
+print(s1 is s2)  # True - same object, faster comparison
+
+# Use for frequently compared strings (e.g., dictionary keys)
+```
+
+## Advanced Function Techniques
+
+### Partial Application and Currying
+
+```python
+from functools import partial
+
+def power(base, exponent):
+    return base ** exponent
+
+# Partial application - fix some arguments
+square = partial(power, exponent=2)
+cube = partial(power, exponent=3)
+
+print(square(5))  # 25
+print(cube(3))    # 27
+
+# Currying - transform multi-arg function to chain of single-arg functions
+def curry(func):
+    @functools.wraps(func)
+    def curried(*args, **kwargs):
+        if len(args) + len(kwargs) >= func.__code__.co_argcount:
+            return func(*args, **kwargs)
+        return lambda *more_args, **more_kwargs: curried(
+            *args, *more_args, **kwargs, **more_kwargs
+        )
+    return curried
+
+@curry
+def add_three(a, b, c):
+    return a + b + c
+
+print(add_three(1)(2)(3))    # 6
+print(add_three(1, 2)(3))    # 6
+print(add_three(1)(2, 3))    # 6
+```
+
+### Function Overloading with singledispatch
+
+```python
+from functools import singledispatch
+from typing import List, Dict
+
+@singledispatch
+def process(data):
+    """Default handler for unknown types."""
+    raise NotImplementedError(f"Cannot process {type(data)}")
+
+@process.register(str)
+def _(data: str):
+    return data.upper()
+
+@process.register(list)
+def _(data: List):
+    return [process(item) for item in data]
+
+@process.register(dict)
+def _(data: Dict):
+    return {k: process(v) for k, v in data.items()}
+
+@process.register(int)
+@process.register(float)
+def _(data):
+    return data * 2
+
+print(process("hello"))           # HELLO
+print(process([1, 2, "three"]))   # [2, 4, 'THREE']
+print(process({"a": 1, "b": "x"}))  # {'a': 2, 'b': 'X'}
+```
+
+## Data Classes and Named Tuples
+
+### Advanced Data Classes
+
+```python
+from dataclasses import dataclass, field, asdict, astuple
+from typing import List, Optional
+import json
+
+@dataclass(frozen=True, slots=True)  # Immutable and memory-efficient
+class Point:
+    x: float
+    y: float
+    
+    def distance_from_origin(self) -> float:
+        return (self.x ** 2 + self.y ** 2) ** 0.5
+
+@dataclass
+class User:
+    name: str
+    email: str
+    age: int
+    tags: List[str] = field(default_factory=list)
+    _internal: str = field(default="", repr=False, compare=False)
+    
+    def __post_init__(self):
+        # Validation after initialization
+        if self.age < 0:
+            raise ValueError("Age cannot be negative")
+        self.email = self.email.lower()
+    
+    def to_json(self) -> str:
+        return json.dumps(asdict(self))
+
+user = User("John", "JOHN@EXAMPLE.COM", 30, ["admin", "user"])
+print(user.email)  # john@example.com
+print(user.to_json())
+```
+
+## Conclusion
+
+These advanced Python features enable you to write more elegant, efficient, and maintainable code. Mastering decorators, metaclasses, descriptors, and generators will elevate your Python skills and help you solve complex problems with clean, Pythonic solutions.
+
+Key takeaways:
+- Use decorators for cross-cutting concerns (logging, caching, validation)
+- Metaclasses are powerful but use sparingly—often simpler solutions exist
+- Descriptors control attribute access and enable reusable validation
+- Generators enable memory-efficient processing of large datasets
+- `__slots__` and weak references optimize memory usage
+- `singledispatch` provides clean function overloading
+
+<CTA href="https://docs.python.org/3/reference/datamodel.html">Python Data Model Documentation</CTA>

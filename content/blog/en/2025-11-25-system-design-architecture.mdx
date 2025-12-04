@@ -1,0 +1,568 @@
+---
+title: "System Design & Software Architecture: Building Scalable Systems"
+description: "Master system design principles including distributed systems, microservices architecture, database scaling, caching strategies, and high-availability patterns for large-scale applications."
+date: "2025-11-25"
+tags: ["System Design", "Architecture", "Distributed Systems", "Scalability", "Backend"]
+hero: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&h=630&fit=crop"
+draft: false
+---
+
+System design is the art of building scalable, reliable, and maintainable systems. This guide covers fundamental principles and advanced patterns used by tech giants to handle millions of users.
+
+## Fundamental Concepts
+
+### Scalability Types
+
+```
+Vertical Scaling (Scale Up)
+├── Add more CPU, RAM, Storage to existing server
+├── Simpler to implement
+├── Hardware limits exist
+└── Single point of failure
+
+Horizontal Scaling (Scale Out)
+├── Add more servers to the pool
+├── Theoretically unlimited scaling
+├── Requires distributed system design
+└── More complex but more resilient
+```
+
+### CAP Theorem
+
+In a distributed system, you can only guarantee two of three properties:
+
+- **Consistency** - All nodes see the same data at the same time
+- **Availability** - Every request receives a response
+- **Partition Tolerance** - System continues despite network failures
+
+<Callout type="info">
+In practice, partition tolerance is non-negotiable in distributed systems. The real choice is between consistency and availability during network partitions.
+</Callout>
+
+```
+CP Systems (Consistency + Partition Tolerance)
+├── MongoDB (with majority write concern)
+├── HBase
+├── Redis Cluster
+└── Use when: Financial transactions, inventory management
+
+AP Systems (Availability + Partition Tolerance)
+├── Cassandra
+├── DynamoDB
+├── CouchDB
+└── Use when: Social media feeds, analytics, caching
+```
+
+## Load Balancing Strategies
+
+### Layer 4 vs Layer 7 Load Balancing
+
+```
+Layer 4 (Transport Layer)
+├── Routes based on IP and TCP/UDP port
+├── Faster, less CPU intensive
+├── No content inspection
+└── Use for: TCP/UDP traffic, gaming, streaming
+
+Layer 7 (Application Layer)
+├── Routes based on HTTP headers, URL, cookies
+├── Content-aware routing
+├── SSL termination
+└── Use for: Web applications, API routing
+```
+
+### Load Balancing Algorithms
+
+```python
+# Round Robin - Simple rotation
+servers = ['server1', 'server2', 'server3']
+current = 0
+
+def round_robin():
+    global current
+    server = servers[current]
+    current = (current + 1) % len(servers)
+    return server
+
+# Weighted Round Robin - Based on server capacity
+servers = [
+    {'host': 'server1', 'weight': 5},  # 50% traffic
+    {'host': 'server2', 'weight': 3},  # 30% traffic
+    {'host': 'server3', 'weight': 2},  # 20% traffic
+]
+
+# Least Connections - Route to server with fewest active connections
+def least_connections(servers):
+    return min(servers, key=lambda s: s.active_connections)
+
+# IP Hash - Consistent routing for same client
+def ip_hash(client_ip, servers):
+    hash_value = hash(client_ip)
+    return servers[hash_value % len(servers)]
+
+# Consistent Hashing - Minimizes redistribution when servers change
+class ConsistentHash:
+    def __init__(self, nodes, virtual_nodes=150):
+        self.ring = {}
+        self.sorted_keys = []
+        
+        for node in nodes:
+            for i in range(virtual_nodes):
+                key = self._hash(f"{node}:{i}")
+                self.ring[key] = node
+                self.sorted_keys.append(key)
+        
+        self.sorted_keys.sort()
+    
+    def get_node(self, key):
+        hash_key = self._hash(key)
+        for ring_key in self.sorted_keys:
+            if hash_key <= ring_key:
+                return self.ring[ring_key]
+        return self.ring[self.sorted_keys[0]]
+```
+
+## Database Scaling Patterns
+
+### Read Replicas
+
+```
+                    ┌─────────────┐
+                    │   Primary   │
+                    │  (Writes)   │
+                    └──────┬──────┘
+                           │
+           ┌───────────────┼───────────────┐
+           │               │               │
+           ▼               ▼               ▼
+    ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+    │  Replica 1  │ │  Replica 2  │ │  Replica 3  │
+    │   (Reads)   │ │   (Reads)   │ │   (Reads)   │
+    └─────────────┘ └─────────────┘ └─────────────┘
+```
+
+```python
+class DatabaseRouter:
+    def __init__(self, primary, replicas):
+        self.primary = primary
+        self.replicas = replicas
+        self.replica_index = 0
+    
+    def get_connection(self, operation):
+        if operation in ('INSERT', 'UPDATE', 'DELETE'):
+            return self.primary
+        else:
+            # Round-robin across replicas
+            replica = self.replicas[self.replica_index]
+            self.replica_index = (self.replica_index + 1) % len(self.replicas)
+            return replica
+```
+
+### Database Sharding
+
+```
+Horizontal Sharding (by rows)
+├── Range-based: users 1-1M → Shard1, 1M-2M → Shard2
+├── Hash-based: hash(user_id) % num_shards
+├── Directory-based: Lookup service maps keys to shards
+└── Geographic: Users by region
+
+Vertical Sharding (by columns/tables)
+├── User data → Database A
+├── Order data → Database B
+└── Analytics → Database C
+```
+
+```python
+class ShardRouter:
+    def __init__(self, shards):
+        self.shards = shards
+        self.num_shards = len(shards)
+    
+    def get_shard(self, user_id):
+        # Consistent hashing for even distribution
+        shard_index = hash(str(user_id)) % self.num_shards
+        return self.shards[shard_index]
+    
+    def get_shard_for_range_query(self, start_id, end_id):
+        # Range queries may need to hit multiple shards
+        shards_needed = set()
+        for user_id in range(start_id, end_id + 1):
+            shards_needed.add(self.get_shard(user_id))
+        return list(shards_needed)
+```
+
+<Note title="Sharding Consideration">
+Sharding adds complexity. Consider read replicas and caching first. Only shard when you've exhausted vertical scaling options.
+</Note>
+
+## Caching Architecture
+
+### Multi-Level Caching
+
+```
+Request Flow:
+                                                    
+Client → CDN → Load Balancer → App Server → Cache → Database
+         ↓           ↓              ↓          ↓
+      Static     Session       Application  Query
+      Assets     Affinity       Cache       Cache
+
+Cache Levels:
+├── L1: Browser Cache (client-side)
+├── L2: CDN Cache (edge locations)
+├── L3: Application Cache (Redis/Memcached)
+├── L4: Database Query Cache
+└── L5: Database Buffer Pool
+```
+
+### Cache Invalidation Strategies
+
+```python
+class CacheManager:
+    def __init__(self, cache, db):
+        self.cache = cache
+        self.db = db
+    
+    # Cache-Aside (Lazy Loading)
+    def get_user(self, user_id):
+        key = f"user:{user_id}"
+        
+        # Try cache first
+        user = self.cache.get(key)
+        if user:
+            return user
+        
+        # Cache miss - load from DB
+        user = self.db.get_user(user_id)
+        if user:
+            self.cache.set(key, user, ttl=3600)
+        
+        return user
+    
+    # Write-Through
+    def update_user_write_through(self, user_id, data):
+        # Update DB first
+        user = self.db.update_user(user_id, data)
+        
+        # Then update cache
+        self.cache.set(f"user:{user_id}", user, ttl=3600)
+        
+        return user
+    
+    # Write-Behind (Async)
+    def update_user_write_behind(self, user_id, data):
+        key = f"user:{user_id}"
+        
+        # Update cache immediately
+        self.cache.set(key, data, ttl=3600)
+        
+        # Queue DB write for async processing
+        self.queue.push({
+            'operation': 'update_user',
+            'user_id': user_id,
+            'data': data
+        })
+        
+        return data
+    
+    # Cache Invalidation
+    def invalidate_user(self, user_id):
+        # Delete specific key
+        self.cache.delete(f"user:{user_id}")
+        
+        # Invalidate related caches
+        self.cache.delete(f"user:{user_id}:orders")
+        self.cache.delete(f"user:{user_id}:preferences")
+        
+        # Tag-based invalidation
+        self.cache.delete_by_tag(f"user:{user_id}")
+```
+
+## Microservices Architecture
+
+### Service Communication Patterns
+
+```
+Synchronous Communication
+├── REST APIs
+│   └── Simple, stateless, HTTP-based
+├── gRPC
+│   └── High performance, binary protocol, streaming
+└── GraphQL
+    └── Flexible queries, single endpoint
+
+Asynchronous Communication
+├── Message Queues (RabbitMQ, SQS)
+│   └── Point-to-point, guaranteed delivery
+├── Event Streaming (Kafka)
+│   └── Pub/sub, event sourcing, replay capability
+└── Event Bus
+    └── Loose coupling, broadcast events
+```
+
+### Service Mesh Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Control Plane                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │   Config    │  │  Discovery  │  │    Certs    │     │
+│  │   Server    │  │   Service   │  │   Manager   │     │
+│  └─────────────┘  └─────────────┘  └─────────────┘     │
+└─────────────────────────────────────────────────────────┘
+                           │
+         ┌─────────────────┼─────────────────┐
+         │                 │                 │
+         ▼                 ▼                 ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│   Service A     │ │   Service B     │ │   Service C     │
+│ ┌─────────────┐ │ │ ┌─────────────┐ │ │ ┌─────────────┐ │
+│ │    App      │ │ │ │    App      │ │ │ │    App      │ │
+│ └─────────────┘ │ │ └─────────────┘ │ │ └─────────────┘ │
+│ ┌─────────────┐ │ │ ┌─────────────┐ │ │ ┌─────────────┐ │
+│ │   Sidecar   │ │ │ │   Sidecar   │ │ │ │   Sidecar   │ │
+│ │   Proxy     │◄┼─┼─►   Proxy     │◄┼─┼─►   Proxy     │ │
+│ └─────────────┘ │ │ └─────────────┘ │ │ └─────────────┘ │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+```
+
+### Circuit Breaker Pattern
+
+```python
+import time
+from enum import Enum
+
+class CircuitState(Enum):
+    CLOSED = "closed"      # Normal operation
+    OPEN = "open"          # Failing, reject requests
+    HALF_OPEN = "half_open"  # Testing if service recovered
+
+class CircuitBreaker:
+    def __init__(
+        self,
+        failure_threshold=5,
+        recovery_timeout=30,
+        expected_exception=Exception
+    ):
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout = recovery_timeout
+        self.expected_exception = expected_exception
+        
+        self.state = CircuitState.CLOSED
+        self.failure_count = 0
+        self.last_failure_time = None
+        self.success_count = 0
+    
+    def call(self, func, *args, **kwargs):
+        if self.state == CircuitState.OPEN:
+            if self._should_attempt_reset():
+                self.state = CircuitState.HALF_OPEN
+            else:
+                raise CircuitBreakerOpenException()
+        
+        try:
+            result = func(*args, **kwargs)
+            self._on_success()
+            return result
+        except self.expected_exception as e:
+            self._on_failure()
+            raise e
+    
+    def _on_success(self):
+        if self.state == CircuitState.HALF_OPEN:
+            self.success_count += 1
+            if self.success_count >= 3:  # Require 3 successes to close
+                self.state = CircuitState.CLOSED
+                self.failure_count = 0
+                self.success_count = 0
+    
+    def _on_failure(self):
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        
+        if self.failure_count >= self.failure_threshold:
+            self.state = CircuitState.OPEN
+    
+    def _should_attempt_reset(self):
+        return (
+            time.time() - self.last_failure_time >= self.recovery_timeout
+        )
+
+# Usage
+user_service_breaker = CircuitBreaker(
+    failure_threshold=5,
+    recovery_timeout=30
+)
+
+def get_user(user_id):
+    return user_service_breaker.call(
+        external_user_service.get,
+        user_id
+    )
+```
+
+## Event-Driven Architecture
+
+### Event Sourcing
+
+```python
+from dataclasses import dataclass
+from datetime import datetime
+from typing import List
+import json
+
+@dataclass
+class Event:
+    event_type: str
+    aggregate_id: str
+    data: dict
+    timestamp: datetime
+    version: int
+
+class EventStore:
+    def __init__(self):
+        self.events = []
+    
+    def append(self, event: Event):
+        self.events.append(event)
+    
+    def get_events(self, aggregate_id: str) -> List[Event]:
+        return [e for e in self.events if e.aggregate_id == aggregate_id]
+
+class Order:
+    def __init__(self, order_id: str):
+        self.order_id = order_id
+        self.status = None
+        self.items = []
+        self.total = 0
+        self.version = 0
+    
+    def apply(self, event: Event):
+        if event.event_type == "OrderCreated":
+            self.status = "created"
+            self.items = event.data["items"]
+            self.total = event.data["total"]
+        elif event.event_type == "OrderPaid":
+            self.status = "paid"
+        elif event.event_type == "OrderShipped":
+            self.status = "shipped"
+            self.tracking_number = event.data["tracking_number"]
+        elif event.event_type == "OrderCancelled":
+            self.status = "cancelled"
+        
+        self.version = event.version
+    
+    @classmethod
+    def rebuild(cls, events: List[Event]) -> "Order":
+        if not events:
+            return None
+        
+        order = cls(events[0].aggregate_id)
+        for event in events:
+            order.apply(event)
+        
+        return order
+
+# Usage
+event_store = EventStore()
+
+# Create order
+event_store.append(Event(
+    event_type="OrderCreated",
+    aggregate_id="order-123",
+    data={"items": [{"sku": "ABC", "qty": 2}], "total": 99.99},
+    timestamp=datetime.now(),
+    version=1
+))
+
+# Rebuild order state from events
+events = event_store.get_events("order-123")
+order = Order.rebuild(events)
+```
+
+### CQRS (Command Query Responsibility Segregation)
+
+```
+                    ┌─────────────────┐
+                    │     Client      │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              │                             │
+              ▼                             ▼
+       ┌─────────────┐              ┌─────────────┐
+       │  Commands   │              │   Queries   │
+       │   (Write)   │              │   (Read)    │
+       └──────┬──────┘              └──────┬──────┘
+              │                             │
+              ▼                             ▼
+       ┌─────────────┐              ┌─────────────┐
+       │   Command   │              │    Query    │
+       │   Handler   │              │   Handler   │
+       └──────┬──────┘              └──────┬──────┘
+              │                             │
+              ▼                             ▼
+       ┌─────────────┐              ┌─────────────┐
+       │   Write     │   Events    │    Read     │
+       │   Model     │────────────►│    Model    │
+       │ (Normalized)│              │(Denormalized│
+       └─────────────┘              └─────────────┘
+```
+
+## High Availability Patterns
+
+### Active-Passive Failover
+
+```
+Normal Operation:
+┌─────────────┐     ┌─────────────┐
+│   Active    │────►│   Passive   │
+│   Server    │     │   Server    │
+│  (Primary)  │     │  (Standby)  │
+└─────────────┘     └─────────────┘
+       │
+       ▼
+   [Traffic]
+
+After Failover:
+┌─────────────┐     ┌─────────────┐
+│   Failed    │     │   Active    │
+│   Server    │     │   Server    │
+│  (Down)     │     │  (Promoted) │
+└─────────────┘     └─────────────┘
+                           │
+                           ▼
+                       [Traffic]
+```
+
+### Active-Active (Multi-Master)
+
+```
+┌─────────────┐     ┌─────────────┐
+│   Active    │◄───►│   Active    │
+│   Server 1  │     │   Server 2  │
+└──────┬──────┘     └──────┬──────┘
+       │                   │
+       └─────────┬─────────┘
+                 │
+          ┌──────┴──────┐
+          │Load Balancer│
+          └──────┬──────┘
+                 │
+             [Traffic]
+```
+
+## Conclusion
+
+System design is about making informed trade-offs based on requirements. There's no one-size-fits-all solution—the best architecture depends on your specific scale, consistency requirements, team expertise, and business constraints.
+
+Key takeaways:
+- Understand CAP theorem and its implications
+- Start simple, scale when needed
+- Use caching strategically at multiple levels
+- Design for failure with circuit breakers and retries
+- Consider event-driven architecture for loose coupling
+- Monitor everything and plan for observability
+
+<CTA href="https://github.com/donnemartin/system-design-primer">System Design Primer</CTA>

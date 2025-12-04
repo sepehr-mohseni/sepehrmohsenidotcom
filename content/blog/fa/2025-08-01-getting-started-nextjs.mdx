@@ -1,0 +1,97 @@
+---
+title: "شروع کار با Next.js 14 App Router"
+description: "راهنمای جامع ساخت برنامه‌های وب مدرن با Next.js 14 App Router، Server Components و TypeScript."
+date: "2025-08-01"
+tags: ["Next.js", "React", "TypeScript", "توسعه وب"]
+hero: "/images/posts/nextjs-hero.png"
+draft: false
+---
+
+Next.js 14 ویژگی‌های قدرتمند جدیدی معرفی می‌کند که ساخت برنامه‌های وب را سریع‌تر و شهودی‌تر می‌کند. در این راهنما، App Router را بررسی می‌کنیم و نحوه استفاده از Server Components برای عملکرد بهتر را یاد می‌گیریم.
+
+## چرا Next.js 14؟
+
+App Router در Next.js 14 چندین بهبود به همراه دارد:
+
+- **Server Components به صورت پیش‌فرض** - کاهش JavaScript سمت کلاینت
+- **Streaming و Suspense** - رندر تدریجی برای UX بهتر
+- **واکشی داده ساده‌شده** - دیگر نیازی به getServerSideProps یا getStaticProps نیست
+- **مسیریابی بهبود یافته** - Layouts، حالت‌های بارگذاری و error boundaries
+
+## راه‌اندازی پروژه
+
+شروع کار ساده است:
+
+```bash
+npx create-next-app@latest my-app --typescript --tailwind --app
+cd my-app
+npm run dev
+```
+
+این یک پروژه Next.js جدید با TypeScript و Tailwind CSS پیکربندی شده ایجاد می‌کند.
+
+## درک Server Components
+
+Server Components در App Router پیش‌فرض هستند. آن‌ها روی سرور رندر می‌شوند و HTML را به کلاینت ارسال می‌کنند:
+
+```tsx
+// app/page.tsx - این یک Server Component است
+async function getData() {
+  const res = await fetch('https://api.example.com/data');
+  return res.json();
+}
+
+export default async function Page() {
+  const data = await getData();
+  
+  return (
+    <main>
+      <h1>{data.title}</h1>
+      <p>{data.description}</p>
+    </main>
+  );
+}
+```
+
+<Callout type="info">
+Server Components نمی‌توانند از هوک‌هایی مانند useState یا useEffect استفاده کنند. برای کامپوننت‌های تعاملی، از دستور "use client" استفاده کنید.
+</Callout>
+
+## Client Components
+
+وقتی به تعامل نیاز دارید، کامپوننت خود را با "use client" علامت‌گذاری کنید:
+
+```tsx
+"use client";
+
+import { useState } from "react";
+
+export function Counter() {
+  const [count, setCount] = useState(0);
+  
+  return (
+    <button onClick={() => setCount(count + 1)}>
+      شمارش: {count}
+    </button>
+  );
+}
+```
+
+## Layouts و Templates
+
+App Router از یک سیستم مسیریابی مبتنی بر فایل با فایل‌های خاص استفاده می‌کند:
+
+- `layout.tsx` - UI مشترک که در مسیرها باقی می‌ماند
+- `page.tsx` - UI منحصر به فرد برای یک مسیر
+- `loading.tsx` - UI بارگذاری با Suspense
+- `error.tsx` - UI مدیریت خطا
+
+<Note title="نکته حرفه‌ای">
+Layouts برای ناوبری، فوترها و سایر عناصر UI پایدار عالی هستند. آن‌ها هنگام ناوبری بین مسیرهای فرزند دوباره رندر نمی‌شوند.
+</Note>
+
+## نتیجه‌گیری
+
+Next.js 14 با App Router پایه‌ای قدرتمند برای ساخت برنامه‌های وب مدرن فراهم می‌کند. ترکیب Server Components، streaming و مسیریابی بهبود یافته، ایجاد وب‌سایت‌های سریع و سازگار با SEO را آسان‌تر از همیشه می‌کند.
+
+<CTA href="https://nextjs.org/docs">مستندات رسمی را بخوانید</CTA>

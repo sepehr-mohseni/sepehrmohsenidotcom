@@ -1,0 +1,158 @@
+---
+title: "Building Modern Web Apps with Next.js 15"
+description: "A comprehensive guide to building production-ready applications with Next.js 15, covering App Router, Server Components, and best practices."
+date: "2025-08-01"
+tags: ["Next.js", "React", "TypeScript", "Web Development"]
+hero: "https://images.unsplash.com/photo-1618761714954-0b8cd0026356?w=1200&h=630&fit=crop"
+draft: false
+---
+
+Next.js has revolutionized how we build React applications. With the release of version 15, we have even more powerful tools at our disposal. Let's explore how to build modern, performant web applications.
+
+## Why Next.js?
+
+Next.js provides an excellent developer experience with features like:
+
+- **Server Components** - Render components on the server for better performance
+- **App Router** - File-based routing with layouts and nested routes
+- **Built-in Optimizations** - Automatic image, font, and script optimization
+- **Full-stack Capabilities** - API routes and server actions
+
+<Callout type="info">
+Next.js 15 introduces significant improvements to the App Router, making it even more powerful for building complex applications.
+</Callout>
+
+## Setting Up Your Project
+
+Getting started is straightforward:
+
+```bash
+npx create-next-app@latest my-app --typescript --tailwind --app
+cd my-app
+npm run dev
+```
+
+This creates a new project with TypeScript, Tailwind CSS, and the App Router enabled by default.
+
+## Understanding the App Router
+
+The App Router uses a file-system based approach to routing:
+
+```
+app/
+├── layout.tsx      # Root layout
+├── page.tsx        # Home page (/)
+├── about/
+│   └── page.tsx    # About page (/about)
+└── blog/
+    ├── page.tsx    # Blog index (/blog)
+    └── [slug]/
+        └── page.tsx # Dynamic blog post (/blog/[slug])
+```
+
+## Server Components
+
+By default, all components in the App Router are Server Components:
+
+```tsx
+// This runs on the server
+async function BlogPosts() {
+  const posts = await fetchPosts(); // Direct database access!
+  
+  return (
+    <ul>
+      {posts.map(post => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+<Note title="Performance Tip">
+Server Components reduce the JavaScript bundle sent to the client, resulting in faster page loads and better Core Web Vitals scores.
+</Note>
+
+## Client Components
+
+When you need interactivity, use the `"use client"` directive:
+
+```tsx
+"use client";
+
+import { useState } from "react";
+
+export function Counter() {
+  const [count, setCount] = useState(0);
+  
+  return (
+    <button onClick={() => setCount(c => c + 1)}>
+      Count: {count}
+    </button>
+  );
+}
+```
+
+## Data Fetching Patterns
+
+Next.js 15 provides multiple ways to fetch data:
+
+### Server Components (Recommended)
+
+```tsx
+async function Page() {
+  const data = await fetch('https://api.example.com/data', {
+    next: { revalidate: 3600 } // Revalidate every hour
+  });
+  
+  return <div>{/* render data */}</div>;
+}
+```
+
+### Server Actions
+
+```tsx
+async function createPost(formData: FormData) {
+  "use server";
+  
+  const title = formData.get("title");
+  await db.posts.create({ title });
+  revalidatePath("/blog");
+}
+```
+
+## Styling with Tailwind CSS
+
+Tailwind CSS integrates seamlessly with Next.js:
+
+```tsx
+export function Card({ children }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm transition-all hover:bg-white/10">
+      {children}
+    </div>
+  );
+}
+```
+
+## Deployment
+
+Deploy to Vercel with zero configuration:
+
+```bash
+npm install -g vercel
+vercel
+```
+
+Or build for other platforms:
+
+```bash
+npm run build
+npm start
+```
+
+## Conclusion
+
+Next.js 15 provides everything you need to build modern web applications. The combination of Server Components, the App Router, and built-in optimizations makes it an excellent choice for projects of any size.
+
+<CTA href="https://nextjs.org/docs">Explore the Documentation</CTA>

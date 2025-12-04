@@ -1,0 +1,97 @@
+// Prisma schema for portfolio site
+// SQLite database for simplicity and portability
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Contact form submissions
+model ContactSubmission {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  message   String
+  ip        String?
+  userAgent String?
+  isSpam    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([ip])
+  @@index([createdAt])
+}
+
+// Rate limiting records
+model RateLimit {
+  id         String   @id @default(cuid())
+  identifier String   // IP address or fingerprint
+  endpoint   String   // API endpoint being rate limited
+  count      Int      @default(1)
+  windowStart DateTime @default(now())
+  
+  @@unique([identifier, endpoint])
+  @@index([windowStart])
+}
+
+// Page analytics
+model PageView {
+  id          String   @id @default(cuid())
+  path        String
+  fingerprint String   // Hash of IP + userAgent + windowSize
+  ip          String?
+  userAgent   String?
+  windowWidth Int?
+  windowHeight Int?
+  referrer    String?
+  country     String?
+  createdAt   DateTime @default(now())
+
+  @@index([path])
+  @@index([fingerprint, path])
+  @@index([createdAt])
+}
+
+// Blog post engagement
+model BlogPost {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  likes     Int      @default(0)
+  shares    Int      @default(0)
+  views     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  postLikes  PostLike[]
+  postShares PostShare[]
+}
+
+// Track individual likes to prevent duplicates
+model PostLike {
+  id          String   @id @default(cuid())
+  postId      String
+  fingerprint String   // User fingerprint
+  createdAt   DateTime @default(now())
+
+  post BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, fingerprint])
+  @@index([postId])
+}
+
+// Track shares
+model PostShare {
+  id          String   @id @default(cuid())
+  postId      String
+  platform    String   // twitter, linkedin, facebook, copy
+  fingerprint String?
+  createdAt   DateTime @default(now())
+
+  post BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+}

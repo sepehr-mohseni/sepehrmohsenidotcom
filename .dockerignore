@@ -1,0 +1,59 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+.next
+out
+build
+dist
+
+# Testing
+coverage
+
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Database files
+*.db
+*.db-journal
+prisma/*.db
+prisma/*.db-journal
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Deployment
+deploy.sh
+backups/
+nginx/ssl/*.pem
+nginx/ssl/*.key
+
+# Logs
+*.log
+npm-debug.log*
+
+# Misc
+README.md
+LICENSE
+*.md

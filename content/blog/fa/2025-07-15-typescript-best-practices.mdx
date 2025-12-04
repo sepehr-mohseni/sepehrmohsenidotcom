@@ -1,0 +1,124 @@
+---
+title: "بهترین شیوه‌های TypeScript برای سال ۲۰۲۵"
+description: "الگوها و شیوه‌های ضروری TypeScript برای نوشتن کد تمیزتر، امن‌تر و قابل نگهداری‌تر در پروژه‌های شما."
+date: "2025-07-15"
+tags: ["TypeScript", "JavaScript", "بهترین شیوه‌ها"]
+hero: "/images/posts/typescript-hero.png"
+draft: false
+---
+
+TypeScript به استاندارد ساخت برنامه‌های JavaScript در مقیاس بزرگ تبدیل شده است. در اینجا بهترین شیوه‌هایی که از سال‌ها تجربه تولید آموخته‌ام آورده شده است.
+
+## از حالت Strict استفاده کنید
+
+همیشه حالت strict را در `tsconfig.json` فعال کنید:
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true
+  }
+}
+```
+
+این کار خطاهای بیشتری را در زمان کامپایل می‌گیرد و کد شما را قابل پیش‌بینی‌تر می‌کند.
+
+## استنتاج نوع را ترجیح دهید
+
+اجازه دهید TypeScript در صورت امکان نوع‌ها را استنتاج کند:
+
+```typescript
+// ❌ حاشیه‌نویسی نوع غیرضروری
+const name: string = "John";
+
+// ✅ اجازه دهید TypeScript استنتاج کند
+const name = "John";
+
+// ✅ وقتی استنتاج کافی نیست حاشیه‌نویسی کنید
+function greet(name: string): string {
+  return `سلام، ${name}!`;
+}
+```
+
+## از Discriminated Unions استفاده کنید
+
+Discriminated unions برای مدیریت حالت‌های مختلف قدرتمند هستند:
+
+```typescript
+type LoadingState = { status: "loading" };
+type SuccessState = { status: "success"; data: User[] };
+type ErrorState = { status: "error"; error: string };
+
+type State = LoadingState | SuccessState | ErrorState;
+
+function render(state: State) {
+  switch (state.status) {
+    case "loading":
+      return <Spinner />;
+    case "success":
+      return <UserList users={state.data} />;
+    case "error":
+      return <Error message={state.error} />;
+  }
+}
+```
+
+<Callout type="warning">
+همیشه همه حالت‌ها را در یک discriminated union مدیریت کنید. TypeScript اگر یکی را از دست بدهید هشدار می‌دهد!
+</Callout>
+
+## از `any` اجتناب کنید - به جای آن از `unknown` استفاده کنید
+
+وقتی نوع را نمی‌دانید، به جای `any` از `unknown` استفاده کنید:
+
+```typescript
+// ❌ خطرناک - بدون بررسی نوع
+function processData(data: any) {
+  return data.name.toUpperCase(); // بدون خطا، اما ممکن است کرش کند
+}
+
+// ✅ امن - نیاز به محدود کردن نوع دارد
+function processData(data: unknown) {
+  if (typeof data === "object" && data !== null && "name" in data) {
+    return (data as { name: string }).name.toUpperCase();
+  }
+  throw new Error("داده نامعتبر");
+}
+```
+
+## از Utility Types استفاده کنید
+
+TypeScript انواع utility قدرتمندی ارائه می‌دهد:
+
+```typescript
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: Date;
+}
+
+// همه ویژگی‌ها را اختیاری کنید
+type PartialUser = Partial<User>;
+
+// همه ویژگی‌ها را اجباری کنید
+type RequiredUser = Required<User>;
+
+// ویژگی‌های خاص را انتخاب کنید
+type UserPreview = Pick<User, "id" | "name">;
+
+// ویژگی‌های خاص را حذف کنید
+type UserWithoutDates = Omit<User, "createdAt">;
+```
+
+<Note>
+Utility types به شما کمک می‌کنند انواع جدید را از انواع موجود بدون تکرار استخراج کنید.
+</Note>
+
+## نتیجه‌گیری
+
+پیروی از این بهترین شیوه‌های TypeScript به شما کمک می‌کند کد قابل نگهداری‌تر و type-safe‌تری بنویسید. به یاد داشته باشید، هدف گرفتن خطاها در زمان کامپایل است نه زمان اجرا.
+
+<CTA href="https://www.typescriptlang.org/docs/handbook/">راهنمای TypeScript</CTA>

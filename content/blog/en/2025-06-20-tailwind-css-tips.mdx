@@ -1,0 +1,237 @@
+---
+title: "Advanced Tailwind CSS Techniques"
+description: "Level up your Tailwind CSS skills with advanced techniques, custom configurations, and performance optimizations."
+date: "2025-06-20"
+tags: ["Tailwind CSS", "CSS", "Frontend", "Design"]
+hero: "https://images.unsplash.com/photo-1507721999472-8ed4421c4af2?w=1200&h=630&fit=crop"
+draft: false
+---
+
+Tailwind CSS has transformed how we write CSS. Let's explore advanced techniques that will take your styling to the next level.
+
+## Custom Design System
+
+Extend Tailwind with your own design tokens:
+
+```javascript
+// tailwind.config.js
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          50: '#f0f9ff',
+          100: '#e0f2fe',
+          500: '#0ea5e9',
+          900: '#0c4a6e',
+        },
+      },
+      fontFamily: {
+        display: ['Cal Sans', 'sans-serif'],
+        body: ['Inter', 'sans-serif'],
+      },
+      spacing: {
+        '18': '4.5rem',
+        '88': '22rem',
+      },
+      animation: {
+        'fade-in': 'fadeIn 0.5s ease-out',
+        'slide-up': 'slideUp 0.5s ease-out',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        slideUp: {
+          '0%': { transform: 'translateY(20px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+      },
+    },
+  },
+};
+```
+
+<Callout type="info">
+A well-defined design system ensures consistency across your application and makes maintenance easier.
+</Callout>
+
+## Component Patterns
+
+### Glass Morphism
+
+```html
+<div class="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+  <h3 class="text-xl font-semibold text-white">Glass Card</h3>
+  <p class="mt-2 text-zinc-400">Beautiful frosted glass effect</p>
+</div>
+```
+
+### Gradient Borders
+
+```html
+<div class="relative rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 p-[1px]">
+  <div class="rounded-xl bg-zinc-900 p-6">
+    <p class="text-white">Content with gradient border</p>
+  </div>
+</div>
+```
+
+### Animated Gradient Background
+
+```html
+<div class="animate-gradient bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-[length:200%_200%]">
+  <span class="bg-clip-text text-transparent">Animated Gradient Text</span>
+</div>
+```
+
+## Group and Peer Modifiers
+
+Style children based on parent state:
+
+```html
+<div class="group rounded-xl border border-white/10 p-6 transition-all hover:border-indigo-500/50">
+  <h3 class="text-white transition-colors group-hover:text-indigo-400">
+    Hover the card
+  </h3>
+  <p class="text-zinc-400 transition-colors group-hover:text-zinc-300">
+    Child elements respond to parent hover
+  </p>
+  <span class="opacity-0 transition-opacity group-hover:opacity-100">
+    I appear on hover!
+  </span>
+</div>
+```
+
+<Note title="Pro Tip">
+Use `group-hover`, `group-focus`, and `group-active` to create complex interactive components without JavaScript.
+</Note>
+
+## Container Queries
+
+Style based on container size, not viewport:
+
+```html
+<div class="@container">
+  <div class="flex flex-col @md:flex-row @lg:gap-8">
+    <div class="@md:w-1/2">Responsive to container</div>
+    <div class="@md:w-1/2">Not viewport</div>
+  </div>
+</div>
+```
+
+## Dark Mode Strategies
+
+### Class-based (Recommended)
+
+```javascript
+// tailwind.config.js
+module.exports = {
+  darkMode: 'class',
+};
+```
+
+```html
+<div class="bg-white text-zinc-900 dark:bg-zinc-900 dark:text-white">
+  Adapts to dark mode
+</div>
+```
+
+### System Preference
+
+```javascript
+// tailwind.config.js
+module.exports = {
+  darkMode: 'media',
+};
+```
+
+## Performance Optimizations
+
+### Purge Unused Styles
+
+```javascript
+// tailwind.config.js
+module.exports = {
+  content: [
+    './app/**/*.{js,ts,jsx,tsx}',
+    './components/**/*.{js,ts,jsx,tsx}',
+  ],
+};
+```
+
+### Use Arbitrary Values Sparingly
+
+```html
+<!-- ❌ Creates unique classes -->
+<div class="w-[137px] h-[42px] mt-[13px]">
+
+<!-- ✅ Use design system values -->
+<div class="w-36 h-10 mt-3">
+```
+
+## Custom Plugins
+
+Create reusable utilities:
+
+```javascript
+// tailwind.config.js
+const plugin = require('tailwindcss/plugin');
+
+module.exports = {
+  plugins: [
+    plugin(function({ addUtilities }) {
+      addUtilities({
+        '.text-gradient': {
+          'background': 'linear-gradient(135deg, #6366f1, #a855f7)',
+          '-webkit-background-clip': 'text',
+          '-webkit-text-fill-color': 'transparent',
+        },
+        '.glass': {
+          'background': 'rgba(255, 255, 255, 0.05)',
+          'backdrop-filter': 'blur(10px)',
+          'border': '1px solid rgba(255, 255, 255, 0.1)',
+        },
+      });
+    }),
+  ],
+};
+```
+
+## Responsive Design Patterns
+
+### Mobile-First Approach
+
+```html
+<!-- Base styles for mobile, then scale up -->
+<div class="p-4 md:p-6 lg:p-8 xl:p-10">
+  <h1 class="text-2xl md:text-3xl lg:text-4xl xl:text-5xl">
+    Responsive Typography
+  </h1>
+</div>
+```
+
+### Responsive Grid
+
+```html
+<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+  <!-- Cards automatically reflow -->
+</div>
+```
+
+## Typography Plugin
+
+For beautiful prose styling:
+
+```html
+<article class="prose prose-invert prose-lg max-w-none prose-headings:font-bold prose-a:text-indigo-400 prose-code:text-pink-400">
+  <!-- Markdown content renders beautifully -->
+</article>
+```
+
+## Conclusion
+
+Tailwind CSS is incredibly powerful when you understand its advanced features. These techniques will help you build more sophisticated, maintainable, and performant user interfaces.
+
+<CTA href="https://tailwindcss.com/docs">Tailwind CSS Documentation</CTA>

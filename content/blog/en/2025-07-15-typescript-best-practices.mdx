@@ -1,0 +1,250 @@
+---
+title: "TypeScript Best Practices for 2025"
+description: "Master TypeScript with these essential patterns, tips, and best practices that will make your code more robust and maintainable."
+date: "2025-07-15"
+tags: ["TypeScript", "JavaScript", "Best Practices", "Programming"]
+hero: "https://images.unsplash.com/photo-1629654297299-c8506221ca97?w=1200&h=630&fit=crop"
+draft: false
+---
+
+TypeScript has become the standard for building large-scale JavaScript applications. Here are the best practices that will help you write better, more maintainable code.
+
+## Strict Mode is Non-Negotiable
+
+Always enable strict mode in your `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
+  }
+}
+```
+
+<Callout type="warning">
+Enabling strict mode after a project has grown can be painful. Start with it from day one.
+</Callout>
+
+## Use Type Inference Wisely
+
+Let TypeScript infer types when it's obvious:
+
+```typescript
+// ❌ Redundant type annotation
+const name: string = "John";
+const numbers: number[] = [1, 2, 3];
+
+// ✅ Let TypeScript infer
+const name = "John";
+const numbers = [1, 2, 3];
+```
+
+But be explicit for function return types:
+
+```typescript
+// ✅ Explicit return type prevents accidental changes
+function calculateTotal(items: Item[]): number {
+  return items.reduce((sum, item) => sum + item.price, 0);
+}
+```
+
+## Prefer Interfaces for Object Types
+
+Use interfaces for object shapes and types for unions/primitives:
+
+```typescript
+// ✅ Interface for objects
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
+// ✅ Type for unions
+type Status = "pending" | "active" | "inactive";
+
+// ✅ Type for complex types
+type AsyncResult<T> = Promise<{ data: T; error: null } | { data: null; error: Error }>;
+```
+
+## Discriminated Unions for State
+
+Model complex state with discriminated unions:
+
+```typescript
+type RequestState<T> =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; data: T }
+  | { status: "error"; error: Error };
+
+function handleState<T>(state: RequestState<T>) {
+  switch (state.status) {
+    case "idle":
+      return "Ready to fetch";
+    case "loading":
+      return "Loading...";
+    case "success":
+      return `Data: ${state.data}`; // TypeScript knows data exists
+    case "error":
+      return `Error: ${state.error.message}`; // TypeScript knows error exists
+  }
+}
+```
+
+<Note title="Type Safety">
+Discriminated unions provide exhaustive type checking, ensuring you handle all possible states.
+</Note>
+
+## Generic Constraints
+
+Use constraints to make generics more useful:
+
+```typescript
+// ❌ Too loose
+function getProperty<T>(obj: T, key: string) {
+  return obj[key]; // Error: Element implicitly has 'any' type
+}
+
+// ✅ Properly constrained
+function getProperty<T, K extends keyof T>(obj: T, key: K): T[K] {
+  return obj[key];
+}
+
+const user = { name: "John", age: 30 };
+const name = getProperty(user, "name"); // string
+const age = getProperty(user, "age");   // number
+```
+
+## Utility Types
+
+Master the built-in utility types:
+
+```typescript
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+}
+
+// Pick specific properties
+type PublicUser = Pick<User, "id" | "name">;
+
+// Omit sensitive properties
+type SafeUser = Omit<User, "password">;
+
+// Make all properties optional
+type PartialUser = Partial<User>;
+
+// Make all properties required
+type RequiredUser = Required<User>;
+
+// Make all properties readonly
+type ReadonlyUser = Readonly<User>;
+```
+
+## Branded Types for Type Safety
+
+Create nominal types for extra safety:
+
+```typescript
+type UserId = string & { readonly brand: unique symbol };
+type PostId = string & { readonly brand: unique symbol };
+
+function createUserId(id: string): UserId {
+  return id as UserId;
+}
+
+function createPostId(id: string): PostId {
+  return id as PostId;
+}
+
+function getUser(id: UserId) { /* ... */ }
+function getPost(id: PostId) { /* ... */ }
+
+const userId = createUserId("user-123");
+const postId = createPostId("post-456");
+
+getUser(userId); // ✅ Works
+getUser(postId); // ❌ Error: Argument of type 'PostId' is not assignable
+```
+
+## Const Assertions
+
+Use `as const` for literal types:
+
+```typescript
+// Without as const
+const config = {
+  endpoint: "/api",
+  timeout: 5000,
+}; // { endpoint: string; timeout: number }
+
+// With as const
+const config = {
+  endpoint: "/api",
+  timeout: 5000,
+} as const; // { readonly endpoint: "/api"; readonly timeout: 5000 }
+```
+
+## Template Literal Types
+
+Create powerful string types:
+
+```typescript
+type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+type ApiRoute = `/api/${string}`;
+type ApiEndpoint = `${HttpMethod} ${ApiRoute}`;
+
+const endpoint: ApiEndpoint = "GET /api/users"; // ✅
+const invalid: ApiEndpoint = "PATCH /api/users"; // ❌ Error
+```
+
+## Error Handling
+
+Type your errors properly:
+
+```typescript
+class AppError extends Error {
+  constructor(
+    message: string,
+    public code: string,
+    public statusCode: number
+  ) {
+    super(message);
+    this.name = "AppError";
+  }
+}
+
+type Result<T, E = AppError> =
+  | { success: true; data: T }
+  | { success: false; error: E };
+
+async function fetchUser(id: string): Promise<Result<User>> {
+  try {
+    const user = await db.users.findById(id);
+    if (!user) {
+      return {
+        success: false,
+        error: new AppError("User not found", "USER_NOT_FOUND", 404),
+      };
+    }
+    return { success: true, data: user };
+  } catch (e) {
+    return {
+      success: false,
+      error: new AppError("Database error", "DB_ERROR", 500),
+    };
+  }
+}
+```
+
+## Conclusion
+
+TypeScript is a powerful tool that, when used correctly, can significantly improve your code quality and developer experience. These patterns will help you write more robust, maintainable applications.
+
+<CTA href="https://www.typescriptlang.org/docs/">TypeScript Documentation</CTA>

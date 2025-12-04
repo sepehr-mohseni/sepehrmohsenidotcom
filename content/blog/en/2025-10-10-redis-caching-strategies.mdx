@@ -1,0 +1,476 @@
+---
+title: "Redis Caching Strategies: From Basics to Advanced Patterns"
+description: "Master Redis caching with strategies for cache invalidation, distributed locking, session management, and real-time features in web applications."
+date: "2025-10-10"
+tags: ["Redis", "Caching", "Backend", "Performance", "Database"]
+hero: "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=1200&h=630&fit=crop"
+draft: false
+---
+
+Redis is more than just a cache—it's a versatile data structure server that can dramatically improve application performance. This guide covers caching strategies from basic patterns to advanced distributed systems techniques.
+
+## Understanding Redis Data Structures
+
+### Strings - Basic Caching
+
+```javascript
+// Simple key-value caching
+await redis.set('user:123', JSON.stringify(user));
+await redis.set('user:123', JSON.stringify(user), 'EX', 3600); // 1 hour TTL
+
+const cached = await redis.get('user:123');
+const user = cached ? JSON.parse(cached) : null;
+
+// Atomic operations
+await redis.incr('page:views:homepage');
+await redis.incrby('product:123:stock', -1);
+```
+
+### Hashes - Structured Data
+
+```javascript
+// Store user as hash (more memory efficient)
+await redis.hset('user:123', {
+  name: 'John Doe',
+  email: 'john@example.com',
+  role: 'admin',
+  lastLogin: Date.now().toString(),
+});
+
+// Get specific fields
+const email = await redis.hget('user:123', 'email');
+
+// Get all fields
+const user = await redis.hgetall('user:123');
+
+// Update single field
+await redis.hset('user:123', 'lastLogin', Date.now().toString());
+```
+
+<Callout type="info">
+Use hashes for objects with many fields. They're more memory-efficient than storing JSON strings and allow partial updates.
+</Callout>
+
+### Sets - Unique Collections
+
+```javascript
+// Track unique visitors
+await redis.sadd('visitors:2024-01-15', 'user:123', 'user:456');
+
+// Check membership
+const isVisitor = await redis.sismember('visitors:2024-01-15', 'user:123');
+
+// Get all members
+const visitors = await redis.smembers('visitors:2024-01-15');
+
+// Set operations
+const commonVisitors = await redis.sinter(
+  'visitors:2024-01-15',
+  'visitors:2024-01-16'
+);
+```
+
+### Sorted Sets - Ranked Data
+
+```javascript
+// Leaderboard
+await redis.zadd('leaderboard:game1', 1500, 'player:123');
+await redis.zadd('leaderboard:game1', 2000, 'player:456');
+
+// Get top 10 players
+const topPlayers = await redis.zrevrange('leaderboard:game1', 0, 9, 'WITHSCORES');
+
+// Get player rank
+const rank = await redis.zrevrank('leaderboard:game1', 'player:123');
+
+// Increment score
+await redis.zincrby('leaderboard:game1', 100, 'player:123');
+```
+
+## Caching Patterns
+
+### Cache-Aside (Lazy Loading)
+
+```javascript
+async function getUser(userId) {
+  const cacheKey = `user:${userId}`;
+  
+  // Try cache first
+  const cached = await redis.get(cacheKey);
+  if (cached) {
+    return JSON.parse(cached);
+  }
+  
+  // Cache miss - fetch from database
+  const user = await db.users.findById(userId);
+  
+  if (user) {
+    // Store in cache with TTL
+    await redis.set(cacheKey, JSON.stringify(user), 'EX', 3600);
+  }
+  
+  return user;
+}
+```
+
+### Write-Through Cache
+
+```javascript
+async function updateUser(userId, data) {
+  // Update database
+  const user = await db.users.update(userId, data);
+  
+  // Update cache immediately
+  const cacheKey = `user:${userId}`;
+  await redis.set(cacheKey, JSON.stringify(user), 'EX', 3600);
+  
+  return user;
+}
+```
+
+### Write-Behind (Write-Back) Cache
+
+```javascript
+// Queue writes for batch processing
+async function updateUserAsync(userId, data) {
+  const cacheKey = `user:${userId}`;
+  
+  // Update cache immediately
+  await redis.hset(cacheKey, data);
+  
+  // Queue for database write
+  await redis.lpush('write-queue:users', JSON.stringify({
+    userId,
+    data,
+    timestamp: Date.now(),
+  }));
+}
+
+// Background worker processes queue
+async function processWriteQueue() {
+  while (true) {
+    const item = await redis.brpop('write-queue:users', 0);
+    const { userId, data } = JSON.parse(item[1]);
+    
+    await db.users.update(userId, data);
+  }
+}
+```
+
+<Note title="Pattern Choice">
+Use cache-aside for read-heavy workloads, write-through for consistency, and write-behind for write-heavy workloads where eventual consistency is acceptable.
+</Note>
+
+## Cache Invalidation Strategies
+
+### Time-Based Expiration
+
+```javascript
+// Simple TTL
+await redis.set('data', value, 'EX', 3600); // 1 hour
+
+// Sliding expiration - reset TTL on access
+async function getWithSlidingExpiration(key, ttl = 3600) {
+  const value = await redis.get(key);
+  if (value) {
+    await redis.expire(key, ttl); // Reset TTL
+  }
+  return value;
+}
+```
+
+### Event-Based Invalidation
+
+```javascript
+// Invalidate on update
+async function updateProduct(productId, data) {
+  await db.products.update(productId, data);
+  
+  // Invalidate related caches
+  await redis.del(`product:${productId}`);
+  await redis.del(`product:${productId}:details`);
+  
+  // Invalidate category cache
+  const product = await db.products.findById(productId);
+  await redis.del(`category:${product.categoryId}:products`);
+}
+
+// Using pub/sub for distributed invalidation
+async function invalidateCache(pattern) {
+  // Publish invalidation event
+  await redis.publish('cache:invalidate', JSON.stringify({ pattern }));
+}
+
+// Subscriber in each app instance
+redis.subscribe('cache:invalidate', async (message) => {
+  const { pattern } = JSON.parse(message);
+  const keys = await redis.keys(pattern);
+  if (keys.length > 0) {
+    await redis.del(...keys);
+  }
+});
+```
+
+### Tag-Based Invalidation
+
+```javascript
+// Store cache with tags
+async function setWithTags(key, value, tags, ttl = 3600) {
+  const pipeline = redis.pipeline();
+  
+  // Store the value
+  pipeline.set(key, JSON.stringify(value), 'EX', ttl);
+  
+  // Add key to each tag set
+  for (const tag of tags) {
+    pipeline.sadd(`tag:${tag}`, key);
+    pipeline.expire(`tag:${tag}`, ttl);
+  }
+  
+  await pipeline.exec();
+}
+
+// Invalidate by tag
+async function invalidateByTag(tag) {
+  const keys = await redis.smembers(`tag:${tag}`);
+  
+  if (keys.length > 0) {
+    await redis.del(...keys, `tag:${tag}`);
+  }
+}
+
+// Usage
+await setWithTags(
+  'product:123',
+  productData,
+  ['products', 'category:electronics', 'featured']
+);
+
+// Invalidate all electronics products
+await invalidateByTag('category:electronics');
+```
+
+## Distributed Locking
+
+### Simple Lock with SETNX
+
+```javascript
+async function acquireLock(lockKey, ttl = 10000) {
+  const lockValue = `${process.pid}:${Date.now()}`;
+  
+  const acquired = await redis.set(
+    lockKey,
+    lockValue,
+    'PX', ttl,
+    'NX' // Only set if not exists
+  );
+  
+  return acquired ? lockValue : null;
+}
+
+async function releaseLock(lockKey, lockValue) {
+  // Lua script for atomic check-and-delete
+  const script = `
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+      return redis.call("del", KEYS[1])
+    else
+      return 0
+    end
+  `;
+  
+  return redis.eval(script, 1, lockKey, lockValue);
+}
+
+// Usage
+async function processOrder(orderId) {
+  const lockKey = `lock:order:${orderId}`;
+  const lockValue = await acquireLock(lockKey);
+  
+  if (!lockValue) {
+    throw new Error('Could not acquire lock');
+  }
+  
+  try {
+    // Process order...
+    await doOrderProcessing(orderId);
+  } finally {
+    await releaseLock(lockKey, lockValue);
+  }
+}
+```
+
+### Redlock for Distributed Systems
+
+```javascript
+import Redlock from 'redlock';
+
+const redlock = new Redlock(
+  [redis1, redis2, redis3], // Multiple Redis instances
+  {
+    driftFactor: 0.01,
+    retryCount: 10,
+    retryDelay: 200,
+    retryJitter: 200,
+  }
+);
+
+async function processWithLock(resourceId) {
+  let lock;
+  
+  try {
+    lock = await redlock.acquire(
+      [`locks:resource:${resourceId}`],
+      5000 // TTL
+    );
+    
+    // Do work...
+    await processResource(resourceId);
+    
+  } catch (error) {
+    if (error instanceof Redlock.LockError) {
+      // Could not acquire lock
+      console.log('Resource is locked');
+    }
+    throw error;
+  } finally {
+    if (lock) {
+      await lock.release();
+    }
+  }
+}
+```
+
+## Session Management
+
+```javascript
+// Session store implementation
+class RedisSessionStore {
+  constructor(redis, options = {}) {
+    this.redis = redis;
+    this.prefix = options.prefix || 'sess:';
+    this.ttl = options.ttl || 86400; // 24 hours
+  }
+
+  async get(sessionId) {
+    const data = await this.redis.get(this.prefix + sessionId);
+    return data ? JSON.parse(data) : null;
+  }
+
+  async set(sessionId, session) {
+    await this.redis.set(
+      this.prefix + sessionId,
+      JSON.stringify(session),
+      'EX',
+      this.ttl
+    );
+  }
+
+  async destroy(sessionId) {
+    await this.redis.del(this.prefix + sessionId);
+  }
+
+  async touch(sessionId) {
+    await this.redis.expire(this.prefix + sessionId, this.ttl);
+  }
+
+  // Get all sessions for a user (for "logout everywhere")
+  async getUserSessions(userId) {
+    const pattern = `${this.prefix}*`;
+    const keys = await this.redis.keys(pattern);
+    const sessions = [];
+
+    for (const key of keys) {
+      const session = await this.redis.get(key);
+      if (session) {
+        const parsed = JSON.parse(session);
+        if (parsed.userId === userId) {
+          sessions.push({ key, session: parsed });
+        }
+      }
+    }
+
+    return sessions;
+  }
+
+  async destroyUserSessions(userId) {
+    const sessions = await this.getUserSessions(userId);
+    if (sessions.length > 0) {
+      await this.redis.del(...sessions.map(s => s.key));
+    }
+  }
+}
+```
+
+## Rate Limiting
+
+### Sliding Window Rate Limiter
+
+```javascript
+async function checkRateLimit(userId, limit = 100, window = 60) {
+  const key = `ratelimit:${userId}`;
+  const now = Date.now();
+  const windowStart = now - (window * 1000);
+
+  const pipeline = redis.pipeline();
+  
+  // Remove old entries
+  pipeline.zremrangebyscore(key, 0, windowStart);
+  
+  // Add current request
+  pipeline.zadd(key, now, `${now}:${Math.random()}`);
+  
+  // Count requests in window
+  pipeline.zcard(key);
+  
+  // Set expiry
+  pipeline.expire(key, window);
+
+  const results = await pipeline.exec();
+  const requestCount = results[2][1];
+
+  return {
+    allowed: requestCount <= limit,
+    remaining: Math.max(0, limit - requestCount),
+    resetAt: new Date(now + (window * 1000)),
+  };
+}
+```
+
+## Pub/Sub for Real-Time Features
+
+```javascript
+// Publisher
+async function publishNotification(userId, notification) {
+  await redis.publish(
+    `notifications:${userId}`,
+    JSON.stringify(notification)
+  );
+}
+
+// Subscriber (in WebSocket handler)
+function subscribeToNotifications(userId, callback) {
+  const subscriber = redis.duplicate();
+  
+  subscriber.subscribe(`notifications:${userId}`, (message) => {
+    callback(JSON.parse(message));
+  });
+
+  return () => {
+    subscriber.unsubscribe(`notifications:${userId}`);
+    subscriber.quit();
+  };
+}
+```
+
+## Conclusion
+
+Redis is a powerful tool that goes far beyond simple caching. By understanding its data structures and implementing appropriate patterns, you can build highly performant, scalable applications.
+
+Key takeaways:
+- Choose the right data structure for your use case
+- Implement appropriate cache invalidation strategies
+- Use distributed locking for concurrent operations
+- Leverage pub/sub for real-time features
+- Monitor and tune Redis performance
+
+<CTA href="https://redis.io/docs/">Redis Documentation</CTA>

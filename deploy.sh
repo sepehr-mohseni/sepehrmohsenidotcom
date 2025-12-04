@@ -136,7 +136,20 @@ EOF
 pull_code() {
     log_info "Pulling latest code from git..."
     git fetch origin
-    git reset --hard origin/main
+    
+    # Detect default branch (main or master)
+    DEFAULT_BRANCH=$(git remote show origin | grep "HEAD branch" | cut -d: -f2 | tr -d ' ' 2>/dev/null || echo "main")
+    if [ -z "$DEFAULT_BRANCH" ]; then
+        # Fallback: check which branch exists
+        if git rev-parse --verify origin/main >/dev/null 2>&1; then
+            DEFAULT_BRANCH="main"
+        else
+            DEFAULT_BRANCH="master"
+        fi
+    fi
+    
+    log_info "Using branch: $DEFAULT_BRANCH"
+    git reset --hard origin/$DEFAULT_BRANCH
     log_success "Code updated"
 }
 

@@ -20,6 +20,7 @@ services:
       - portfolio-network
     labels:
       # Traefik configuration
+      - "traefik.http.routers.portfolio.tls=true"
       - "traefik.enable=true"
       - "traefik.http.routers.portfolio.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)"
       - "traefik.http.routers.portfolio.entrypoints=websecure"

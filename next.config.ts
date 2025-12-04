@@ -30,6 +30,24 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "origin-when-cross-origin" },
         ],
       },
+      {
+        source: "/:path*.(jpg|jpeg|png|gif|webp|avif|svg|ico)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=7200, stale-while-revalidate=86400" },
+        ],
+      },
+      {
+        source: "/_next/image",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=7200, stale-while-revalidate=86400" },
+        ],
+      },
+      {
+        source: "/_next/static/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=604800, immutable" },
+        ],
+      },
     ];
   },
 };

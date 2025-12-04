@@ -6,19 +6,21 @@ set -e
 # ===========================================
 # Usage: ./deploy.sh [command]
 # Commands:
-#   setup     - First-time setup (creates config, starts with SSL)
-#   deploy    - Full deployment (pull, build, up)
-#   up        - Start containers (dev mode, no SSL)
-#   up-prod   - Start with Traefik (production, auto SSL)
-#   down      - Stop containers
-#   restart   - Restart containers
-#   logs      - View logs
-#   status    - Check status
-#   db        - Start DB web UI (accessible via SSH tunnel)
-#   backup    - Backup database
-#   restore   - Restore database from backup
-#   clean     - Remove unused Docker resources
-#   ssl-status - Check SSL certificate status
+#   setup       - First-time setup (creates config, starts with SSL)
+#   deploy      - Full deployment (pull, fresh build, up, verify)
+#   up          - Start containers (dev mode, no SSL)
+#   up-prod     - Start with Traefik (production, auto SSL)
+#   down        - Stop containers
+#   restart     - Restart containers
+#   logs        - View logs
+#   status      - Check status
+#   verify      - Verify deployment (Prisma, DB, health)
+#   db          - Start DB web UI (accessible via SSH tunnel)
+#   backup      - Backup database
+#   restore     - Restore database from backup
+#   build-fresh - Clean cache and build fresh
+#   clean       - Remove unused Docker resources
+#   ssl-status  - Check SSL certificate status
 # ===========================================
 
 # Colors for output
@@ -143,6 +145,83 @@ build_images() {
     log_info "Building Docker images..."
     docker compose --env-file "$ENV_FILE" build --no-cache
     log_success "Images built"
+}
+
+# Full clean build (remove all cache)
+clean_build() {
+    log_info "🧹 Cleaning all Docker build cache..."
+    docker builder prune -af 2>/dev/null || true
+    
+    log_info "🔨 Building fresh (no cache)..."
+    docker compose --env-file "$ENV_FILE" build --no-cache --pull
+    log_success "Fresh build complete"
+}
+
+# Verify deployment (check Prisma, DB, health)
+verify_deployment() {
+    echo ""
+    log_info "🔍 Verifying deployment..."
+    echo ""
+    
+    # Check container is running
+    if ! docker ps --format '{{.Names}}' | grep -q "portfolio-app"; then
+        log_error "Container portfolio-app is not running"
+        return 1
+    fi
+    log_success "Container is running"
+    
+    # Check health status
+    HEALTH=$(docker inspect --format='{{.State.Health.Status}}' portfolio-app 2>/dev/null || echo "unknown")
+    if [ "$HEALTH" = "healthy" ]; then
+        log_success "Container is healthy"
+    else
+        log_warn "Container health: $HEALTH"
+    fi
+    
+    # Check Prisma CLI exists
+    log_info "Checking Prisma CLI..."
+    if docker exec portfolio-app test -f ./node_modules/.bin/prisma; then
+        log_success "Prisma CLI found"
+        
+        # Check Prisma version
+        PRISMA_VER=$(docker exec portfolio-app ./node_modules/.bin/prisma --version 2>&1 | head -1 || echo "unknown")
+        log_info "Prisma version: $PRISMA_VER"
+    else
+        log_error "Prisma CLI not found in container"
+    fi
+    
+    # Check database tables
+    log_info "Checking database tables..."
+    if docker exec portfolio-app ./node_modules/.bin/prisma db push --skip-generate 2>&1 | grep -q "already in sync"; then
+        log_success "Database schema is in sync"
+    else
+        log_warn "Running schema push..."
+        docker exec portfolio-app ./node_modules/.bin/prisma db push --skip-generate
+    fi
+    
+    # Check if tables exist by querying
+    log_info "Verifying tables exist..."
+    source "$ENV_FILE"
+    DB_NAME=${DB_NAME:-portfolio}
+    TABLE_COUNT=$(docker exec portfolio-app sqlite3 /app/data/${DB_NAME}.db ".tables" 2>/dev/null | wc -w || echo "0")
+    if [ "$TABLE_COUNT" -gt 0 ]; then
+        log_success "Database has $TABLE_COUNT tables"
+        docker exec portfolio-app sqlite3 /app/data/${DB_NAME}.db ".tables" 2>/dev/null || true
+    else
+        log_warn "No tables found - database may need initialization"
+    fi
+    
+    # Check HTTP response
+    log_info "Checking HTTP response..."
+    HTTP_CODE=$(docker exec portfolio-app wget -q -O /dev/null -S http://127.0.0.1:3000/ 2>&1 | grep "HTTP/" | tail -1 | awk '{print $2}' || echo "000")
+    if [ "$HTTP_CODE" = "200" ]; then
+        log_success "HTTP 200 OK"
+    else
+        log_warn "HTTP response: $HTTP_CODE"
+    fi
+    
+    echo ""
+    log_success "✅ Verification complete"
 }
 
 # Start containers (dev mode, no SSL)
@@ -329,14 +408,15 @@ full_deploy() {
     fi
     
     pull_code
-    build_images
+    clean_build
     stop_containers
     start_production
     
+    sleep 5
+    verify_deployment
+    
     echo ""
     log_success "🚀 Deployment complete!"
-    echo ""
-    check_status
 }
 
 # Main command handler
@@ -385,6 +465,14 @@ case "${1:-help}" in
         check_env || exit 1
         build_images
         ;;
+    build-fresh)
+        check_env || exit 1
+        clean_build
+        ;;
+    verify)
+        check_env || exit 1
+        verify_deployment
+        ;;
     clean)
         clean_docker
         ;;
@@ -414,7 +502,9 @@ case "${1:-help}" in
         echo "  restore     - Restore from backup"
         echo ""
         echo "Maintenance:"
-        echo "  build       - Build images only"
+        echo "  build       - Build images"
+        echo "  build-fresh - Clean all cache and build fresh"
+        echo "  verify      - Verify deployment (Prisma, DB, health)"
         echo "  clean       - Clean Docker resources"
         ;;
 esac

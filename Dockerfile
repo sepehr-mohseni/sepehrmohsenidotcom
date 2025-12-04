@@ -11,15 +11,17 @@ RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
-# Install dependencies
-RUN npm ci --only=production && \
-    npx prisma generate
+# Install ALL dependencies (including devDependencies for build)
+RUN npm ci && npx prisma generate
 
 # ===========================================
 # Stage 2: Builder
 # ===========================================
 FROM node:24-alpine AS builder
 WORKDIR /app
+
+# Install libc6-compat for build
+RUN apk add --no-cache libc6-compat
 
 # Copy deps from previous stage
 COPY --from=deps /app/node_modules ./node_modules
@@ -31,6 +33,10 @@ RUN npx prisma generate
 # Build application
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+
+# Need to provide a dummy DATABASE_URL for build
+ENV DATABASE_URL="file:./prisma/build.db"
+
 RUN npm run build
 
 # ===========================================

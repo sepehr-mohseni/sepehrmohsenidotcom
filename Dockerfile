@@ -12,7 +12,8 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma/
 
 # Install ALL dependencies (including devDependencies for build)
-RUN npm ci && npx prisma generate
+# Use npm exec instead of npx to ensure we use the installed version (6.1.0)
+RUN npm ci && npm exec prisma generate
 
 # ===========================================
 # Stage 2: Builder
@@ -27,8 +28,8 @@ RUN apk add --no-cache libc6-compat
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma client
-RUN npx prisma generate
+# Generate Prisma client (use npm exec to use installed 6.1.0, not latest from registry)
+RUN npm exec prisma generate
 
 # Build application
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -65,6 +66,13 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+
+# Create prisma CLI wrapper script (since .bin symlinks don't copy properly)
+RUN mkdir -p ./node_modules/.bin && \
+    echo '#!/bin/sh' > ./node_modules/.bin/prisma && \
+    echo 'exec node /app/node_modules/prisma/build/index.js "$@"' >> ./node_modules/.bin/prisma && \
+    chmod +x ./node_modules/.bin/prisma
 
 # Copy content and data folders (needed at runtime for MDX and profile data)
 COPY --from=builder /app/content ./content

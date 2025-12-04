@@ -122,4 +122,5 @@ volumes:
 
 networks:
   portfolio-network:
+    name: portfolio-network
     driver: bridge

@@ -116,6 +116,8 @@ function MDXImage({ src, alt }: { src?: string; alt?: string }) {
         width={800}
         height={450}
         className="rounded-lg"
+        loading="lazy"
+        sizes="(max-width: 768px) 100vw, 800px"
       />
       {alt && (
         <figcaption className="mt-2 text-center text-sm text-zinc-500 dark:text-zinc-400">

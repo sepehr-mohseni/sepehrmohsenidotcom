@@ -61,6 +61,7 @@ export function Hero() {
                   fill
                   className="object-cover object-top"
                   priority
+                  sizes="80px"
                 />
               </div>
             </div>
@@ -158,6 +159,7 @@ export function Hero() {
                 fill
                 className="object-cover object-top"
                 priority
+                sizes="256px"
               />
             </div>
           </div>

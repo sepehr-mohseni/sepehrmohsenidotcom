@@ -5,6 +5,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { Analytics } from "@/components/Analytics";
+import { NavigationProgress } from "@/components/NavigationProgress";
 import "./globals.css";
 
 const inter = Inter({
@@ -44,6 +45,7 @@ export default function RootLayout({
             <div className="absolute -bottom-1/2 right-0 h-[800px] w-[800px] rounded-full bg-gradient-to-t from-cyan-500/10 via-blue-500/5 to-transparent blur-3xl" />
           </div>
           
+          <NavigationProgress />
           <Header />
           <main>{children}</main>
           <Footer />
